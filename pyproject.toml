@@ -1,0 +1,72 @@
+[project]
+name = "ljp-page"
+version = "0.1.0"
+description = "综合性Python工具包，包含网络请求、数据分析、可视化、浏览器自动化等功能模块"
+readme = "README.md"
+requires-python = ">=3.12"
+license = {text = "MIT"}
+authors = [
+    {name = "ljp", email = "ljp@example.com"}
+]
+keywords = ["web-scraping", "data-analysis", "visualization", "automation", "network"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Scientific/Engineering :: Visualization",
+]
+
+dependencies = [
+    "requests>=2.31.0",
+    "aiohttp>=3.9.0",
+    "lxml>=4.9.0",
+    "playwright>=1.40.0",
+    "pandas>=2.1.0",
+    "numpy>=1.26.0",
+    "matplotlib>=3.8.0",
+    "pyecharts>=2.0.0",
+    "ddddocr>=1.4.0",
+    "seaborn>=0.13.2",
+    "scikit-learn>=1.8.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/yourusername/ljp-package"
+Documentation = "https://github.com/yourusername/ljp-package/blob/main/README.md"
+Repository = "https://github.com/yourusername/ljp-package"
+Issues = "https://github.com/yourusername/ljp-package/issues"
+
+[build-system]
+requires = ["setuptools>=68.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ljp_page*"]
+
+[tool.black]
+line-length = 100
+target-version = ["py312"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+select = ["E", "F", "I", "N", "W"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
