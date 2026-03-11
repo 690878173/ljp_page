@@ -3,6 +3,8 @@ import numpy as np
 import pandas as pd
 from typing import Dict, List, Tuple, Optional, Union, Literal
 from itertools import combinations
+from dataclasses import dataclass
+from pathlib import Path
 
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
@@ -179,7 +181,7 @@ class Multimodal:
         :param modality1: 第一个模态名称
         :param modality2: 第二个模态名称
         :param n_components: 典型变量数量
-        :return: (X_scores, Y_scores, X_loadings, Y_loadings) 典型变量得分和载荷
+        :return: (X_scores, Y_scores, X_loadings, Y_loadings) 典型变量得分和载荷(即进过cca降维后的新特征和对应权重)
         """
         X, Y, n_components = self._validate_and_get_max_components(modality1, modality2, n_components)
 
@@ -195,12 +197,21 @@ class Multimodal:
                 :param modality1: 第一个模态名称
                 :param modality2: 第二个模态名称
                 :param n_components: 典型变量数量
-                :return: 典型相关系数数组
+                :return: 典型相关系数数组（典则相关系数为每一对 CCA 新特征之间的皮尔逊相关系数）
                 """
         X_scores, Y_scores, _, _ = self.cca(modality1, modality2, n_components)
 
-        correlations = np.array([pearsonr(X_scores[:, i], Y_scores[:, i])[0]
-                                 for i in range(X_scores.shape[1])])
+        # 皮尔逊计算
+        # correlations = np.array([pearsonr(X_scores[:, i], Y_scores[:, i])[0]
+        #                          for i in range(X_scores.shape[1])])
+
+        X_centered = X_scores - X_scores.mean(axis=0)
+        Y_centered = Y_scores - Y_scores.mean(axis=0)
+
+        # 向量化
+        correlations = np.sum(X_centered * Y_centered, axis=0) / (
+                np.sqrt(np.sum(X_centered ** 2, axis=0)) * np.sqrt(np.sum(Y_centered ** 2, axis=0))
+        )
 
         return correlations
 
@@ -223,7 +234,7 @@ class Multimodal:
             raise ValueError("所有模态的样本数量必须一致")
 
         modality_names = list(self.modalities.keys())
-
+        fused_features = None
         if fusion_method == 'concat':
             fused_features = np.hstack([self.modalities[name].scaled_data for name in modality_names])
 
@@ -371,154 +382,493 @@ class Multimodal:
         return similarity_dict
 
 
+@dataclass
+class DataConfig:
+    """数据生成配置"""
+    n_samples: int
+    n_features_per_modality: Dict[str, int]
+    n_classes: int = 3
+    noise_level: float = 0.0
+    missing_rate: float = 0.0
+    outlier_rate: float = 0.0
+    class_balance: Optional[List[float]] = None
+    concept_drift: bool = False
+    temporal_dependence: bool = False
+    multi_label: bool = False
+    random_state: int = 42
 
 
+class DataGen:
+    """
+    多模态数据生成器
 
+    生成各种复杂场景的多模态测试数据：
+    - 噪声干扰
+    - 缺失值
+    - 异常值
+    - 类别不平衡
+    - 概念漂移
+    - 时间序列依赖
+    - 多标签分类
+    """
 
-
-
-
-
-
-
-
-
-
-
-class create_data:
-    @staticmethod
-    def data(n_samples=200):
+    def __init__(self, config: DataConfig|None=None):
         """
-            生成真正的多模态数据：智能健康监测系统（四模态）
+        初始化数据生成器
 
-            场景：结合多种数据源进行综合健康状况分析
+        参数：
+            config: 数据生成配置
+        """
+        if config is None:
+            config = DataConfig(
+            n_samples=200,
+            n_features_per_modality={
+                'sensor': 20,
+                'image': 15,
+                'text': 25,
+                'audio': 12
+            },
+            n_classes=4,
+            noise_level=0.15,
+            missing_rate=0.08,
+            outlier_rate=0.05,
+            class_balance=[0.4, 0.3, 0.2, 0.1],
+            concept_drift=False,
+            temporal_dependence=False,
+            random_state=42
+        )
+        self._change_config(config)
 
-            模态1 - 传感器时序数据（连续生理信号）：
-            - 心率变异性特征：HRV时域、频域指标
-            - 血压特征：收缩压、舒张压、脉压差
-            - 体温特征：基础体温、体温波动
+    def _change_config(self,config):
+        self.config = config
+        self.rng = np.random.RandomState(config.random_state)
+        self.modality_names = list(config.n_features_per_modality.keys())
 
-            模态2 - 图像特征数据（视觉特征）：
-            - 皮肤图像特征：颜色直方图、纹理特征
-            - 面部特征：气色指数、水肿程度
+    def _generate_base_data(self, modality: str, n_features: int) -> Tuple[np.ndarray, np.ndarray]:
+        """生成基础数据"""
+        n_samples = self.config.n_samples
+        n_classes = self.config.n_classes
 
-            模态3 - 临床检验数据（血液生化指标）：
-            - 血常规：白细胞、红细胞、血红蛋白、血小板
-            - 生化指标：血糖、胆固醇、甘油三酯、尿酸
+        if self.config.class_balance is None:
+            class_probs = np.ones(n_classes) / n_classes
+        else:
+            class_probs = np.array(self.config.class_balance)
+            class_probs = class_probs / class_probs.sum()
 
-            模态4 - 行为活动数据（生活方式指标）：
-            - 运动数据：每日步数、运动时长、消耗卡路里
-            - 睡眠数据：睡眠时长、深睡比例、早睡次数、睡眠质量评分
+        labels = self.rng.choice(n_classes, size=n_samples, p=class_probs)
 
-            参数：
-                n_samples: 样本数量
+        base_means = []
+        base_stds = []
+        for class_idx in range(n_classes):
+            if modality == 'sensor':
+                class_mean = self.rng.uniform(50, 100, n_features)
+                class_std = self.rng.uniform(5, 15, n_features)
+            elif modality == 'image':
+                class_mean = self.rng.uniform(150, 250, n_features)
+                class_std = self.rng.uniform(10, 30, n_features)
+            elif modality == 'text':
+                class_mean = self.rng.uniform(0, 1, n_features)
+                class_std = self.rng.uniform(0.1, 0.3, n_features)
+            elif modality == 'audio':
+                class_mean = self.rng.uniform(-1, 1, n_features)
+                class_std = self.rng.uniform(0.2, 0.5, n_features)
+            else:
+                class_mean = self.rng.uniform(0, 100, n_features)
+                class_std = self.rng.uniform(10, 20, n_features)
 
-            返回：
-                dict: 包含四个模态的数据字典
-                health_labels: 健康状态标签（健康/亚健康/疾病）
-            """
-        np.random.seed(42)
+            base_means.append(class_mean)
+            base_stds.append(class_std)
 
-        # 健康状态标签：0-健康，1-亚健康，2-疾病风险
-        health_labels = np.random.choice([0, 1, 2], size=n_samples, p=[0.5, 0.35, 0.15])
+        data = np.zeros((n_samples, n_features))
+        for i in range(n_samples):
+            class_idx = labels[i]
+            data[i] = self.rng.normal(base_means[class_idx], base_stds[class_idx])
 
-        # 统一配置：{健康状态: [传感器参数, 图像参数, 临床检验参数, 行为活动参数]}
-        # 每个参数格式: [[均值, 标准差], ...]
-        params = {
-            0: [  # 健康
-                [[50, 8], [45, 6], [42, 7], [800, 150], [1200, 200], [115, 8], [75, 5], [36.5, 0.3], [0.3, 0.1]],
-                # 传感器10维
-                [[230, 10], [190, 12], [180, 15], [25, 5], [28, 6], [30, 7], [40, 10], [0.85, 0.05], [0.15, 0.03],
-                 [85, 8], [0.1, 0.05]],  # 图像11维
-                [[6.5, 1.2], [4.8, 0.5], [140, 10], [250, 40], [5.0, 0.6], [4.5, 0.8], [1.2, 0.3], [320, 50]],  # 临床8维
-                [[10000, 2000], [60, 15], [450, 100], [7.5, 1.0], [85, 5], [5, 1], [90, 5]]  # 行为7维
-            ],
-            1: [  # 亚健康
-                [[35, 10], [30, 8], [28, 9], [1100, 200], [700, 150], [128, 12], [82, 8], [36.8, 0.4], [0.5, 0.15]],
-                [[210, 15], [175, 18], [165, 20], [32, 8], [35, 9], [38, 10], [55, 12], [0.75, 0.08], [0.10, 0.04],
-                 [65, 12], [0.25, 0.08]],
-                [[7.8, 1.5], [4.5, 0.6], [135, 12], [280, 50], [5.8, 0.8], [5.2, 1.0], [1.8, 0.4], [380, 60]],
-                [[7000, 2500], [40, 20], [350, 150], [6.5, 1.2], [75, 8], [3, 1], [70, 10]]
-            ],
-            2: [  # 疾病风险
-                [[20, 12], [18, 10], [15, 8], [1500, 300], [400, 120], [145, 18], [90, 12], [37.2, 0.5], [0.8, 0.2]],
-                [[180, 20], [150, 22], [140, 25], [45, 12], [48, 14], [50, 15], [75, 15], [0.60, 0.10], [0.05, 0.03],
-                 [40, 15], [0.45, 0.12]],
-                [[10.5, 2.0], [4.2, 0.8], [125, 15], [320, 70], [7.2, 1.2], [6.5, 1.5], [2.8, 0.6], [480, 80]],
-                [[4000, 2000], [20, 15], [200, 100], [5.0, 1.5], [60, 12], [1, 1], [50, 15]]
-            ]
-        }
+        return data, labels
 
-        # 特征名称
-        sensor_names = [
-            'HRV均值', 'HRV_SDNN', 'HRV_RMSSD', 'HRV低频功率', 'HRV高频功率',
-            '收缩压', '舒张压', '脉压差', '基础体温', '体温波动'
-        ]
-        image_names = [
-            '皮肤R均值', '皮肤G均值', '皮肤B均值',
-            '皮肤R标准差', '皮肤G标准差', '皮肤B标准差',
-            '纹理对比度', '纹理均匀性', '纹理能量',
-            '气色指数', '水肿程度'
-        ]
-        lab_names = [
-            '白细胞计数', '红细胞计数', '血红蛋白', '血小板计数',
-            '空腹血糖', '总胆固醇', '甘油三酯', '尿酸'
-        ]
-        behavior_names = [
-            '每日步数', '运动时长', '消耗卡路里',
-            '睡眠时长', '深睡比例', '早睡次数', '睡眠质量'
-        ]
+    def _add_noise(self, data: np.ndarray) -> np.ndarray:
+        """添加噪声"""
+        if self.config.noise_level <= 0:
+            return data
 
-        # 在一个循环中同时生成四个模态的数据
-        sensor_features = []
-        image_features = []
-        lab_features = []
-        behavior_features = []
+        noise = self.rng.normal(0, self.config.noise_level * data.std(), data.shape)
+        return data + noise
 
-        for health_state in health_labels:
-            sensor_param, image_param, lab_param, behavior_param = params[health_state]
+    def _add_missing_values(self, data: np.ndarray) -> np.ndarray:
+        """添加缺失值"""
+        if self.config.missing_rate <= 0:
+            return data
 
-            # 生成传感器数据
-            sensor_data = [np.random.normal(p[0], p[1]) for p in sensor_param[:7]]
-            pp = sensor_data[5] - sensor_data[6]
-            sensor_data.append(pp)
-            sensor_data.extend([np.random.normal(p[0], p[1]) for p in sensor_param[7:]])
-            sensor_data = np.array(sensor_data) + np.random.normal(0, 1, 10)
-            sensor_features.append(sensor_data)
+        data_with_missing = data.copy()
+        n_missing = int(data.size * self.config.missing_rate)
 
-            # 生成图像数据
-            img_data = [np.random.normal(p[0], p[1]) for p in image_param]
-            img_data = np.array(img_data) + np.random.normal(0, 2, 11)
-            image_features.append(img_data)
+        for _ in range(n_missing):
+            i = self.rng.randint(0, data.shape[0])
+            j = self.rng.randint(0, data.shape[1])
+            data_with_missing[i, j] = np.nan
 
-            # 生成临床检验数据
-            lab_data = [np.random.normal(p[0], p[1]) for p in lab_param]
-            lab_data = np.array(lab_data) + np.random.normal(0, 0.5, 8)
-            lab_features.append(lab_data)
+        return data_with_missing
 
-            # 生成行为活动数据
-            behavior_data = [np.random.normal(p[0], p[1]) for p in behavior_param]
-            behavior_data = np.array(behavior_data) + np.random.normal(0, 3, 7)
-            behavior_features.append(behavior_data)
+    def _add_outliers(self, data: np.ndarray) -> np.ndarray:
+        """添加异常值"""
+        if self.config.outlier_rate <= 0:
+            return data
 
-        X_sensor = np.array(sensor_features)
-        X_image = np.array(image_features)
-        X_lab = np.array(lab_features)
-        X_behavior = np.array(behavior_features)
+        data_with_outliers = data.copy()
+        n_outliers = int(data.size * self.config.outlier_rate)
 
-        # 创建DataFrame
-        df_sensor = pd.DataFrame(X_sensor, columns=sensor_names)
-        df_image = pd.DataFrame(X_image, columns=image_names)
-        df_lab = pd.DataFrame(X_lab, columns=lab_names)
-        df_behavior = pd.DataFrame(X_behavior, columns=behavior_names)
+        for _ in range(n_outliers):
+            i = self.rng.randint(0, data.shape[0])
+            j = self.rng.randint(0, data.shape[1])
 
-        # 返回包含四个模态的字典
-        return {
-            'sensor': df_sensor,
-            'image': df_image,
-            'lab': df_lab,
-            'behavior': df_behavior
-        }, health_labels
+            outlier_multiplier = self.rng.choice([3, 5, 10])
+            data_with_outliers[i, j] = data_with_outliers[i, j] * outlier_multiplier
 
+        return data_with_outliers
+
+    def _apply_concept_drift(self, data: np.ndarray, labels: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """应用概念漂移"""
+        if not self.config.concept_drift:
+            return data, labels
+
+        n_samples = data.shape[0]
+        drift_point = int(n_samples * 0.6)
+
+        drifted_data = data.copy()
+        drifted_labels = labels.copy()
+
+        drift_factor = 1.5
+        for i in range(drift_point, n_samples):
+            drifted_data[i] = drifted_data[i] * drift_factor
+
+        return drifted_data, drifted_labels
+
+    def _apply_temporal_dependence(self, data: np.ndarray) -> np.ndarray:
+        """应用时间序列依赖"""
+        if not self.config.temporal_dependence:
+            return data
+
+        temporal_data = data.copy()
+        lag = 5
+        dependence = 0.3
+
+        for i in range(lag, temporal_data.shape[0]):
+            temporal_data[i] = (1 - dependence) * temporal_data[i] + dependence * temporal_data[i - lag]
+
+        return temporal_data
+
+    def _generate_multi_label(self, labels: np.ndarray) -> np.ndarray:
+        """生成多标签"""
+        if not self.config.multi_label:
+            return labels.reshape(-1, 1)
+
+        n_samples = labels.shape[0]
+        n_classes = self.config.n_classes
+        multi_labels = np.zeros((n_samples, n_classes), dtype=int)
+
+        for i in range(n_samples):
+            primary_class = labels[i]
+            multi_labels[i, primary_class] = 1
+
+            n_additional_labels = self.rng.randint(0, 2)
+            available_classes = [c for c in range(n_classes) if c != primary_class]
+
+            if available_classes and n_additional_labels > 0:
+                additional_classes = self.rng.choice(available_classes, n_additional_labels, replace=False)
+                for ac in additional_classes:
+                    multi_labels[i, ac] = 1
+
+        return multi_labels
+
+    def generate(self) -> Dict[str, np.ndarray]:
+        """
+        生成完整的多模态数据集
+
+        返回：
+            dict: 包含所有模态数据和标签的字典
+        """
+        modality_data = {}
+        primary_labels = None
+
+        for modality_name, n_features in self.config.n_features_per_modality.items():
+            data, labels = self._generate_base_data(modality_name, n_features)
+
+            data = self._add_noise(data)
+            data = self._add_missing_values(data)
+            data = self._add_outliers(data)
+            data, labels = self._apply_concept_drift(data, labels)
+            data = self._apply_temporal_dependence(data)
+
+            modality_data[modality_name] = data
+
+            if primary_labels is None:
+                primary_labels = labels
+
+        final_labels = self._generate_multi_label(primary_labels)
+        modality_data['labels'] = final_labels
+
+        return modality_data
+
+    def generate_feature_names(self) -> Dict[str, List[str]]:
+        """生成特征名称"""
+        feature_names = {}
+        for modality_name, n_features in self.config.n_features_per_modality.items():
+            names = [f'{modality_name}_feature_{i}' for i in range(n_features)]
+            feature_names[modality_name] = names
+        return feature_names
+
+    def get_data_statistics(self, data: Dict[str, np.ndarray]) -> pd.DataFrame:
+        """获取数据统计信息"""
+        stats = []
+        for modality_name, modality_data in data.items():
+            if modality_name == 'labels':
+                continue
+
+            n_missing = np.isnan(modality_data).sum()
+            missing_pct = (n_missing / modality_data.size) * 100
+
+            stats.append({
+                '模态': modality_name,
+                '形状': str(modality_data.shape),
+                '缺失值数量': n_missing,
+                '缺失值比例': f'{missing_pct:.2f}%',
+                '均值': f'{np.nanmean(modality_data):.4f}',
+                '标准差': f'{np.nanstd(modality_data):.4f}',
+                '最小值': f'{np.nanmin(modality_data):.4f}',
+                '最大值': f'{np.nanmax(modality_data):.4f}'
+            })
+
+        return pd.DataFrame(stats)
+
+    def get_small_data(self,random_state: int = 42):
+        config = DataConfig(
+            n_samples=50,
+            n_features_per_modality={
+                'sensor': 10,
+                'image': 8,
+                'text': 15
+            },
+            n_classes=3,
+            noise_level=0.1,
+            missing_rate=0.05,
+            outlier_rate=0.03,
+            random_state=random_state
+        )
+        self._change_config(config)
+        data = self.generate()
+        return data,config
+
+    def get_medium_data(self,random_state: int = 42):
+        config = DataConfig(
+            n_samples=200,
+            n_features_per_modality={
+                'sensor': 20,
+                'image': 15,
+                'text': 25,
+                'audio': 12
+            },
+            n_classes=4,
+            noise_level=0.15,
+            missing_rate=0.08,
+            outlier_rate=0.05,
+            class_balance=[0.4, 0.3, 0.2, 0.1],
+            concept_drift=False,
+            temporal_dependence=False,
+            random_state=random_state
+        )
+        self._change_config(config)
+        data = self.generate()
+        return data,config
+
+    def get_large_data(self,random_state: int = 42):
+        """
+        生成大规模数据（1000 样本）
+
+        适用于：
+        - 大规模模型训练
+        - 深度学习算法测试
+        - 性能压力测试
+        """
+        config = DataConfig(
+            n_samples=1000,
+            n_features_per_modality={
+                'sensor': 50,
+                'image': 40,
+                'text': 100,
+                'audio': 30,
+                'video': 25
+            },
+            n_classes=5,
+            noise_level=0.2,
+            missing_rate=0.1,
+            outlier_rate=0.05,
+            class_balance=[0.5, 0.25, 0.15, 0.07, 0.03],
+            concept_drift=True,
+            temporal_dependence=True,
+            random_state=random_state
+        )
+        self._change_config(config)
+        data = self.generate()
+        return data,config
+
+    def get_imbalanced_data(self,random_state: int = 42):
+        """
+        生成高度不平衡数据（模拟罕见类别）
+
+        适用于：
+        - 不平衡学习算法测试
+        - 代价敏感学习验证
+        - 少数类识别能力评估
+        """
+        config = DataConfig(
+            n_samples=300,
+            n_features_per_modality={
+                'sensor': 15,
+                'image': 12,
+                'text': 20
+            },
+            n_classes=4,
+            noise_level=0.1,
+            missing_rate=0.05,
+            outlier_rate=0.04,
+            class_balance=[0.70, 0.20, 0.08, 0.02],
+            random_state=random_state
+        )
+        self._change_config(config)
+        data = self.generate()
+        return data,config
+
+    def get_concept_drift_data(self,random_state: int = 42):
+        """
+        生成概念漂移数据
+
+        适用于：
+        - 概念漂移检测算法测试
+        - 增量学习验证
+        - 模型适应性评估
+        """
+        config = DataConfig(
+            n_samples=500,
+            n_features_per_modality={
+                'sensor': 20,
+                'image': 15,
+                'text': 25
+            },
+            n_classes=3,
+            noise_level=0.1,
+            missing_rate=0.15,
+            outlier_rate=0.03,
+            concept_drift=True,
+            temporal_dependence=True,
+            random_state=random_state
+        )
+        self._change_config(config)
+        data = self.generate()
+        return data,config
+
+    def get_time_series_data(self,random_state: int = 42):
+        """
+        生成时间序列依赖数据
+
+        适用于：
+        - 时序模型测试
+        - 序列相关性分析
+        - 时间依赖性验证
+        """
+        config = DataConfig(
+            n_samples=400,
+            n_features_per_modality={
+                'sensor': 18,
+                'image': 14,
+                'audio': 16
+            },
+            n_classes=3,
+            noise_level=0.08,
+            missing_rate=0.04,
+            outlier_rate=0.02,
+            temporal_dependence=True,
+            random_state=random_state
+        )
+        self._change_config(config)
+        data = self.generate()
+        return data,config
+
+    def get_multi_label_data(self,random_state: int = 42):
+        """
+        生成多标签分类数据
+
+        适用于：
+        - 多标签学习算法测试
+        - 标签相关性分析
+        - 多标签评估指标验证
+        """
+        config = DataConfig(
+            n_samples=250,
+            n_features_per_modality={
+                'sensor': 18,
+                'image': 15,
+                'text': 22
+            },
+            n_classes=5,
+            noise_level=0.12,
+            missing_rate=0.06,
+            outlier_rate=0.04,
+            multi_label=True,
+            random_state=random_state
+        )
+        self._change_config(config)
+        data = self.generate()
+        return data,config
+
+    def get_high_noise_data(self,random_state: int = 42):
+        """
+        生成高噪声数据
+
+        适用于：
+        - 鲁棒性测试
+        - 噪声处理算法验证
+        - 信号处理能力评估
+        """
+        config = DataConfig(
+            n_samples=150,
+            n_features_per_modality={
+                'sensor': 12,
+                'image': 10,
+                'text': 16
+            },
+            n_classes=3,
+            noise_level=0.5,
+            missing_rate=0.1,
+            outlier_rate=0.08,
+            random_state=random_state
+        )
+        self._change_config(config)
+        data = self.generate()
+        return data,config
+
+    def save_data(self, data: Dict[str, np.ndarray], output_dir: str) -> None:
+        """
+        保存生成的数据
+
+        参数：
+            data: 生成的数据
+            output_dir: 输出目录
+        """
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+
+        feature_names = self.generate_feature_names()
+
+        for modality_name, modality_data in data.items():
+            if modality_name == 'labels':
+                continue
+
+            df = pd.DataFrame(modality_data, columns=feature_names.get(modality_name))
+            df.to_csv(output_path / f'{modality_name}.csv', index=False, encoding='utf-8-sig')
+
+        labels_df = pd.DataFrame(data['labels'])
+        labels_df.to_csv(output_path / 'labels.csv', index=False, encoding='utf-8-sig')
+
+        print(f"数据已保存至: {output_path}")
 
 

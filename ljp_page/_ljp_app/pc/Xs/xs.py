@@ -5,13 +5,16 @@ import winsound
 import tkinter as tk
 from tkinter import messagebox
 import ast
-from ljp_page._ljp_applications.pc.base.base_pc import Pc,BaseManager
+from ljp_page._ljp_app.pc.base.base_pc import Pc,BaseManager
 from ljp_page.logger import Logger
 from ljp_page.request import Html
 from ljp_page.exceptions import No
 
 
 class Xs(Pc):
+    """
+    需要继承重写 parse_p1，parse_p2，parse_p3
+    """
     class Manager(BaseManager):
         CHAPTER_PATTERNS = {
             0: r'^(序章|前言|引子|楔子|后记|番外|终章)',

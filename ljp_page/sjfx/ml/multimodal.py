@@ -1,1 +1,1 @@
-from ..._ljp_data_analysis.multimodal import Multimodal, ModalityData
+from ljp_page._ljp_data_analysis.ml.multimodal.multimodal import Multimodal, ModalityData

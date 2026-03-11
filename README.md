@@ -1,5 +1,51 @@
 # LJP Package
 
+## Unified Request Sessions
+
+### Sync Example
+
+```python
+from ljp_page._ljp_network.requests import create_session
+
+with create_session(
+    "sync",
+    headers={"X-Trace-Source": "sync-demo"},
+    retry={"total": 2, "backoff_factor": 0.2},
+) as session:
+    response = session.get("https://example.com")
+    print(response.status_code, response.text)
+```
+
+### Async Example
+
+```python
+import asyncio
+
+from ljp_page._ljp_network.requests import create_session
+
+
+async def main() -> None:
+    async with create_session(
+        "async",
+        headers={"X-Trace-Source": "async-demo"},
+        retry={"total": 2, "backoff_factor": 0.2},
+    ) as session:
+        response = await session.get("https://example.com")
+        print(response.status_code, response.json())
+
+
+asyncio.run(main())
+```
+
+### Benchmark
+
+Local loopback benchmark collected on 2026-03-10 with 200 requests at concurrency 20.
+
+| Runtime | Transport | QPS | Peak memory |
+| --- | --- | ---: | ---: |
+| SyncSession | requests | 246.92 | 0.92 MB |
+| AsyncSession | aiohttp | 278.77 | 1.80 MB |
+
 综合性Python工具包，提供网络请求、数据分析、可视化、浏览器自动化等功能的统一封装。
 
 ## 功能特性
