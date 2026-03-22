@@ -8,7 +8,7 @@ from pathlib import Path
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
-from ljp_page._ljp_data_analysis.ml.Kmean import KmeanCluster
+from ljp_page._ljp_data_analysis.ml.Kmean import KMeanCluster
 from ljp_page._ljp_data_analysis.visualization.pyecharts import Pyecharts
 from ljp_page._ljp_data_analysis.visualization.matplotlib import Matplotlib
 from sklearn.cross_decomposition import CCA, PLSCanonical, PLSRegression
@@ -286,7 +286,7 @@ class Multimodal:
                 raise ValueError("请先调用 fuse_modalities() 进行数据融合")
             data = self.fusion_matrix
 
-        self.cluster_model = KmeanCluster(data, random_state=self.random_state)
+        self.cluster_model = KMeanCluster(data, random_state=self.random_state)
         self.cluster_model.fit(n_clusters=n_clusters, init=init, n_init=n_init, max_iter=max_iter)
 
         return self.cluster_model

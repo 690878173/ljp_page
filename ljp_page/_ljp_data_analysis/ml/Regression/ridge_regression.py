@@ -1,4 +1,4 @@
-"""线性回归模型封装。"""
+"""Ridge 回归模型封装。"""
 
 from __future__ import annotations
 
@@ -6,22 +6,14 @@ from typing import Mapping, Union
 
 import numpy as np
 import pandas as pd
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import Ridge
 from sklearn.preprocessing import StandardScaler
 
 from ..base import BaseModel, ModelType
 
 
-class LinearRegressionModel(BaseModel):
-    """
-    线性回归模型。
-
-    说明：
-    - 输入 `X` 作为特征矩阵；
-    - 输入 `y` 作为监督目标；
-    - 支持可选标准化；
-    - 兼容基类模型保存/加载扩展钩子。
-    """
+class RidgeRegressionModel(BaseModel):
+    """L2 正则化线性回归。"""
 
     def __init__(
         self,
@@ -40,7 +32,7 @@ class LinearRegressionModel(BaseModel):
         self.scaled_X: Union[np.ndarray, None] = None
         self._is_scaled = True
 
-    def preprocess(self, scale: bool = True) -> "LinearRegressionModel":
+    def preprocess(self, scale: bool = True) -> "RidgeRegressionModel":
         """特征预处理。"""
         self._is_scaled = bool(scale)
         if self._is_scaled:
@@ -49,22 +41,20 @@ class LinearRegressionModel(BaseModel):
             self.scaled_X = self.data.copy()
         return self
 
-    def fit(self, scale: bool = True, **kwargs) -> "LinearRegressionModel":
-        """
-        训练线性回归模型。
-
-        `kwargs` 会透传给 `sklearn.linear_model.LinearRegression`。
-        """
+    def fit(self, scale: bool = True, **kwargs) -> "RidgeRegressionModel":
+        """训练 Ridge 回归模型。"""
         if self.scaled_X is None or self._is_scaled != bool(scale):
             self.preprocess(scale=scale)
 
-        self.model = LinearRegression(**kwargs)
+        params = {"random_state": self.random_state}
+        params.update(kwargs)
+        self.model = Ridge(**params)
         self.model.fit(self.scaled_X, self.y)
         self._mark_fitted(True)
         return self
 
     def predict(self, new_data: Union[np.ndarray, pd.DataFrame]) -> np.ndarray:
-        """预测新数据。"""
+        """预测新样本。"""
         self._check_is_fitted()
         features = self._convert_data(new_data, ensure_2d=True)
         if features.shape[1] != self.data.shape[1]:
@@ -99,7 +89,6 @@ class LinearRegressionModel(BaseModel):
         return df.sort_values("绝对值系数", ascending=False, ignore_index=True)
 
     def _get_serializable_state(self) -> dict[str, object]:
-        """保存子类状态。"""
         return {
             "y": self.y,
             "scaler_X": self.scaler_X,
@@ -108,7 +97,6 @@ class LinearRegressionModel(BaseModel):
         }
 
     def _load_serializable_state(self, state: Mapping[str, object]) -> None:
-        """恢复子类状态。"""
         self.y = np.asarray(state.get("y", self.y)).ravel()
         scaler = state.get("scaler_X")
         self.scaler_X = scaler if scaler is not None else StandardScaler()
@@ -116,21 +104,17 @@ class LinearRegressionModel(BaseModel):
         self._is_scaled = bool(state.get("_is_scaled", True))
 
 
-def linear_regression_auto(
+def ridge_regression_auto(
     X: Union[np.ndarray, pd.DataFrame],
     y: Union[np.ndarray, pd.Series],
     scale: bool = True,
     **kwargs,
-) -> tuple[LinearRegressionModel, np.ndarray]:
-    """
-    自动训练线性回归并返回训练集预测结果。
-
-    返回 `(model, predictions)`。
-    """
-    model = LinearRegressionModel(X, y)
+) -> tuple[RidgeRegressionModel, np.ndarray]:
+    """自动训练 Ridge 并返回训练集预测值。"""
+    model = RidgeRegressionModel(X, y)
     model.fit(scale=scale, **kwargs)
     predictions = model.predict(X)
     return model, predictions
 
 
-__all__ = ["LinearRegressionModel", "linear_regression_auto"]
+__all__ = ["RidgeRegressionModel", "ridge_regression_auto"]

@@ -1,4 +1,3 @@
-import json
 from Xs.xs import Xs_UI
 from ljp_page.request import Html
 
@@ -6,7 +5,7 @@ class YY(Xs_UI):
     def parse_p1(self,res_html,url):
         html = Html.str_to_html(res_html)
         li = html.xpath('//div[@class="bd"]/ul/li/div/a/@href')
-        return li,None
+        return self.P1Result(items=li, next_url=None)
 
 
     def parse_p2(self,res_html,url:str):
@@ -22,9 +21,15 @@ class YY(Xs_UI):
         if next_url == url:
             next_url = None
 
-        return title,author,dres,ls,next_url
+        return self.P2ParseResult(
+            title=title,
+            author=author,
+            description=dres,
+            p3s=ls,
+            next_url=next_url,
+        )
 
-    def parse_p3(self,res_html,url) ->tuple[str,str,str|None]:
+    def parse_p3(self,res_html,url):
         html = Html.str_to_html(res_html)
         title = html.xpath('//h1[@class="page-title"]/text()')[0]
         content1 = html.xpath('//div[@class="page-content font-large"]//text()')
@@ -38,7 +43,7 @@ class YY(Xs_UI):
                 next_url = '/'.join(url.split('/')[:-1]) + '/'+a
         else:
             next_url = None
-        return title,content,next_url
+        return self.P3ParseResult(title=title, content=content, next_url=next_url)
 
 
 
@@ -80,7 +85,7 @@ if __name__ == '__main__':
         mode='mode2',
         headers=headers,
         cookies=cookies,
-        save_path=r'E:/爬虫/test',
+        save_path=r'E:/鐖櫕/test',
         start_id=9,
         end_id=30,
         max_workers=5,
@@ -91,3 +96,4 @@ if __name__ == '__main__':
     xs = YY(config)
     UI = xs.UI(xs)
     UI.run()
+

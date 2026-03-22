@@ -33,6 +33,10 @@ dependencies = [
     "ddddocr>=1.4.0",
     "seaborn>=0.13.2",
     "scikit-learn>=1.8.0",
+    "xgboost>=3.2.0",
+    "lightgbm>=4.6.0",
+    "catboost>=1.2.10",
+    "ipykernel>=7.2.0",
 ]
 
 [project.optional-dependencies]
@@ -64,6 +68,8 @@ target-version = ["py312"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+
+[tool.ruff.lint]
 select = ["E", "F", "I", "N", "W"]
 
 [tool.pytest.ini_options]

@@ -1,307 +1,351 @@
-from tkinter import N
 from typing import Literal
 
 import numpy as np
 import pandas as pd
 
 
-class _BaseAccessor:
-    """
-    基础访问器类，提供通用方法
-    """
-    def __init__(self, pandas_obj):
-        self._obj: pd.DataFrame = pandas_obj
+CorrelationMethod = Literal["pearson", "spearman", "kendall"]
+OutlierMethod = Literal["iqr", "zscore"]
+ParquetEngine = Literal["auto", "pyarrow", "fastparquet"]
 
-    def _help(self):
-        all_members = dir(self.__class__)
-        public_members = [member for member in all_members if not member.startswith('_')]
-        return public_members
+
+class _BaseAccessor:
+    """基础访问器类，封装公共校验和帮助方法。"""
+
+    def __init__(self, pandas_obj: pd.DataFrame):
+        self._obj = pandas_obj
+
+    def _help(self) -> list[str]:
+        """返回当前模块公开的方法名。"""
+        methods: list[str] = []
+        for name in dir(self.__class__):
+            if name.startswith("_"):
+                continue
+            member = getattr(self.__class__, name)
+            if callable(member):
+                methods.append(name)
+        return sorted(methods)
+
+    def _ensure_columns(self, columns: str | list[str]) -> list[str]:
+        """校验列名是否存在，并统一返回列表。"""
+        column_names = [columns] if isinstance(columns, str) else list(columns)
+        missing_columns = [name for name in column_names if name not in self._obj.columns]
+        if missing_columns:
+            missing_text = "、".join(missing_columns)
+            raise ValueError(f"错误：数据中不存在列 {missing_text}，请检查列名是否正确")
+        return column_names
 
 
 class Info(_BaseAccessor):
-    """
-    信息查看模块
-    """
-    def __init__(self, pandas_obj):
-        super().__init__(pandas_obj)
+    """信息查看模块。"""
 
-    def summary(self,map:dict=None) -> pd.DataFrame:
+    def summary(self, column_map: dict[str, str] | None = None) -> pd.DataFrame:
         """
-        快速生成数据集的统计摘要，数值列显示统计信息，非数值列显示 "-"
-        :return: 包含列名、数据类型、非空数量、缺失数量、缺失占比及数值统计的 DataFrame
+        快速生成数据集摘要。
+
+        数值列会附带 describe 统计结果，非数值列对应统计位显示为 "-".
         """
-        if map is None:
-            map = {}
-        else:
-            map = {
-            '中文名称': [map.get(col, col) for col in self._obj.columns]}
+        summary_df = pd.DataFrame(index=self._obj.columns)
 
-        map.update({
-            "数据类型": self._obj.dtypes,
-            "非空数量": self._obj.count(),
-            "缺失数量": self._obj.isnull().sum(),
-            "缺失占比(%)": (self._obj.isnull().mean() * 100).round(4)
-        })
-        summary = pd.DataFrame(map)
+        if column_map:
+            summary_df["中文名称"] = [column_map.get(col, col) for col in self._obj.columns]
 
-        df_numeric = self._obj.select_dtypes(include=['number'])
-        if not df_numeric.empty:
-            describe_df = df_numeric.describe().T
-            for col in describe_df.columns:
-                summary[col] = ""
-                for idx in summary.index:
-                    if idx in describe_df.index:
-                        summary.at[idx, col] = describe_df.at[idx, col]
-                    else:
-                        summary.at[idx, col] = "-"
+        summary_df["数据类型"] = self._obj.dtypes.astype(str)
+        summary_df["非空数量"] = self._obj.count()
+        summary_df["缺失数量"] = self._obj.isna().sum()
+        summary_df["缺失占比(%)"] = (self._obj.isna().mean() * 100).round(4)
 
-        summary.index.name = "列名"
-        return summary
+        numeric_stats = self._obj.select_dtypes(include=["number"]).describe().T
+        if not numeric_stats.empty:
+            summary_df = summary_df.join(numeric_stats, how="left")
+            stat_columns = list(numeric_stats.columns)
+            summary_df[stat_columns] = summary_df[stat_columns].astype(object)
+            summary_df[stat_columns] = summary_df[stat_columns].where(
+                summary_df[stat_columns].notna(),
+                "-",
+            )
 
-    def check_duplicates(self, subset: list | None = None, return_count: bool = True) -> int | str | None:
-        """
-        检查 DataFrame 中是否有重复行
-        :param subset: 用于检查重复的列名列表，默认 None（检查所有列）
-        :param return_count: True 返回重复值数量（int），False 返回描述性字符串
-        :return: 重复值数量或描述字符串（无重复值返回 None）
-        """
-        dup_mask = self._obj.duplicated(subset=subset)
-        if not dup_mask.any():
+        summary_df.index.name = "列名"
+        return summary_df
+
+    def check_duplicates(
+        self,
+        subset: str | list[str] | None = None,
+        return_count: bool = True,
+    ) -> int | str | None:
+        """检查 DataFrame 中是否存在重复记录。"""
+        if subset is not None:
+            self._ensure_columns(subset)
+
+        duplicate_mask = self._obj.duplicated(subset=subset)
+        duplicate_count = int(duplicate_mask.sum())
+        if duplicate_count == 0:
             return None
-        dup_count = dup_mask.sum()
-        return dup_count if return_count else f'共{dup_count}个重复值'
+
+        if return_count:
+            return duplicate_count
+        return f"共 {duplicate_count} 条重复记录"
+
+    def value_counts(self,columns: list[str] | None = None) -> dict:
+        value_counts = {}
+        for column in columns:
+            counts = self._obj[column].value_counts().sort_values()
+            value_counts[column] = [counts.index,counts.values]
+        return value_counts
+
 
 
 class Clean(_BaseAccessor):
-    """
-    数据清洗模块
-    """
-    def __init__(self, pandas_obj):
-        super().__init__(pandas_obj)
+    """数据清洗模块。"""
 
-    def get_outliers(self, col_name: str, method: str = "iqr", threshold: float = 1.5) -> pd.DataFrame:
-        """
-        检测异常值
-        :param col_name: 要检测的列名
-        :param method: 检测方法，'iqr'（四分位距法）或 'zscore'（Z-score法）
-        :param threshold: 阈值，iqr 默认 1.5，zscore 默认 3
-        :return: 包含异常值的 DataFrame
-        """
+    def get_outliers(
+        self,
+        col_name: str,
+        method: OutlierMethod = "iqr",
+        threshold: float | None = None,
+    ) -> pd.DataFrame:
+        """检测指定数值列中的异常值。"""
+        self._ensure_columns(col_name)
+
         col_data = self._obj[col_name]
+        if not pd.api.types.is_numeric_dtype(col_data):
+            raise TypeError(f"错误：列 '{col_name}' 不是数值类型，无法执行异常值检测")
+
         if method == "iqr":
+            effective_threshold = 1.5 if threshold is None else threshold
             q1 = col_data.quantile(0.25)
             q3 = col_data.quantile(0.75)
             iqr = q3 - q1
-            lower = q1 - threshold * iqr
-            upper = q3 + threshold * iqr
+            lower = q1 - effective_threshold * iqr
+            upper = q3 + effective_threshold * iqr
             outliers_mask = (col_data < lower) | (col_data > upper)
         elif method == "zscore":
-            z_scores = (col_data - col_data.mean()) / col_data.std()
-            outliers_mask = abs(z_scores) > threshold
+            effective_threshold = 3.0 if threshold is None else threshold
+            std = col_data.std()
+            if pd.isna(std) or std == 0:
+                return self._obj.iloc[0:0].copy()
+            z_scores = (col_data - col_data.mean()) / std
+            outliers_mask = z_scores.abs() > effective_threshold
         else:
-            raise ValueError(f"不支持的异常值检测方法: {method}")
-        return self._obj[outliers_mask]
+            raise ValueError(f"错误：不支持的异常值检测方法 {method}")
+
+        return self._obj.loc[outliers_mask.fillna(False)]
 
 
 class Convert(_BaseAccessor):
-    """
-    类型转换模块
-    """
-    def __init__(self, pandas_obj):
-        super().__init__(pandas_obj)
-    
-    def to_datatype(self, dic: dict):
+    """类型转换模块。"""
 
-        for col_name in dic.get('num',[]):
-            self._obj[col_name] = pd.to_numeric(self._obj[col_name], errors='coerce')
-        for col_name in dic.get('str',[]):
+    def to_datatype(self, mapping: dict[str, list[str]] | None = None) -> pd.DataFrame:
+        """
+        按分组批量转换列类型。
+
+        支持的键:
+        - "num": 转数值类型
+        - "str": 转字符串类型
+        - "datetime": 转时间类型
+        """
+        if not mapping:
+            return self._obj
+
+        for col_name in mapping.get("num", []):
+            self._ensure_columns(col_name)
+            self._obj[col_name] = pd.to_numeric(self._obj[col_name], errors="coerce")
+
+        for col_name in mapping.get("str", []):
+            self._ensure_columns(col_name)
             self._obj[col_name] = self._obj[col_name].astype(str)
-        for col_name in dic.get('datetime',[]):
-            self._obj[col_name] = self.to_datetime(col_name)
+
+        datetime_columns = mapping.get("datetime", [])
+        if datetime_columns:
+            self.to_datetime(datetime_columns, inplace=True)
+
         return self._obj
 
-
-    def to_datetime(self, col_name, format='mixed', errors='coerce', inplace: bool = True):
+    def to_datetime(
+        self,
+        col_name: str | list[str],
+        format: str | None = "mixed",
+        errors: Literal["raise", "coerce", "ignore"] = "coerce",
+        inplace: bool = True,
+    ) -> pd.DataFrame:
         """
-        转换指定列为 datetime 类型，支持 format='mixed' 兼容多种格式
-        :param col_name: 要转换的列名，可以是单个列名或列名列表
-        :param format: 时间格式，默认 'mixed'（pandas ≥ 2.0.0 支持）
-        :param errors: 错误处理方式，默认 'coerce'
-        :return: dataframe
+        转换指定列为 datetime 类型。
+
+        `format="mixed"` 依赖 pandas 2.x，可兼容多种时间格式。
         """
-        col_name = col_name if isinstance(col_name, list) else [col_name]
-        df_to_process = self._obj[col_name].copy() if not inplace else self._obj
+        column_names = self._ensure_columns(col_name)
+        target_df = self._obj if inplace else self._obj.copy()
 
-        def _to_datetime(col):
-            if not pd.api.types.is_datetime64_any_dtype(df_to_process[col]):
-                df_to_process[col] = pd.to_datetime(df_to_process[col], format=format, errors=errors)
+        for column in column_names:
+            if not pd.api.types.is_datetime64_any_dtype(target_df[column]):
+                target_df[column] = pd.to_datetime(
+                    target_df[column],
+                    format=format,
+                    errors=errors,
+                )
 
-        for col in col_name:
-            _to_datetime(col)
-
-        return df_to_process
+        return target_df
 
 
 class Process(_BaseAccessor):
-    """
-    数据处理模块
-    """
-    def __init__(self, pandas_obj):
-        super().__init__(pandas_obj)
+    """数据处理模块。"""
 
-    def sample(self, n: int | None = None, frac: float | None = None, random_state: int | None = None) -> pd.DataFrame:
-        """
-        随机采样
-        :param n: 采样数量
-        :param frac: 采样比例，与 n 二选一
-        :param random_state: 随机种子，保证结果可复现
-        :return: 采样后的 DataFrame
-        """
+    def sample(
+        self,
+        n: int | None = None,
+        frac: float | None = None,
+        random_state: int | None = None,
+    ) -> pd.DataFrame:
+        """随机抽样。"""
         return self._obj.sample(n=n, frac=frac, random_state=random_state)
 
 
 class Analysis(_BaseAccessor):
-    """
-    统计分析模块
-    """
-    def __init__(self, pandas_obj):
-        super().__init__(pandas_obj)
+    """统计分析模块。"""
 
-    def corr(self, method: str | None = "pearson") -> pd.DataFrame:
-        """
-        自动筛选数值型列，计算相关系数矩阵，避免字符串列转换报错
-        :param method: 相关系数计算方法，默认 "pearson"，支持 "spearman"、"kendall"
-        :return: 数值型列的相关系数矩阵
-        """
-        df_numeric = self._obj.select_dtypes(include=['number'])
-
-        if df_numeric.empty:
-            raise ValueError("错误：DataFrame 中无有效数值型列，无法计算相关系数")
-
-        corr_matrix = df_numeric.corr(method=method)
-        return corr_matrix
+    def corr(self, method: CorrelationMethod = "pearson") -> pd.DataFrame:
+        """自动筛选数值列并计算相关系数矩阵。"""
+        numeric_df = self._obj.select_dtypes(include=["number"])
+        if numeric_df.empty:
+            raise ValueError("错误：DataFrame 中没有有效数值列，无法计算相关系数")
+        return numeric_df.corr(method=method)
 
     def stand(self, col_name: str | None = None, max_min: bool = False) -> pd.Series | pd.DataFrame:
         """
-        数据标准化：支持最大最小值归一化（[0,1]区间）和Z-score标准化（均值0，标准差1）
-        Parameters:
-            col_name: str  目标列名
-            max_min: bool  是否执行最大最小值归一化，默认False（执行Z-score标准化）
-        Returns:
-            pandas.Series  标准化后的列数据，保持与原数据索引对齐
-        """
-        s = self._obj[col_name].copy() if col_name else self._obj.copy()
+        标准化数值数据。
 
-        s = s.fillna(0)
+        - `col_name` 有值时，仅处理单列并返回 Series
+        - `col_name` 为空时，只处理全部数值列并返回 DataFrame
+        """
+        if col_name is not None:
+            self._ensure_columns(col_name)
+            numeric_series = pd.to_numeric(self._obj[col_name], errors="coerce")
+            return self._scale_series(numeric_series, max_min=max_min)
+
+        numeric_df = self._obj.select_dtypes(include=["number"]).copy()
+        if numeric_df.empty:
+            raise ValueError("错误：DataFrame 中没有可标准化的数值列")
+
+        for column in numeric_df.columns:
+            numeric_df[column] = self._scale_series(numeric_df[column], max_min=max_min)
+        return numeric_df
+
+    @staticmethod
+    def _scale_series(series: pd.Series, max_min: bool = False) -> pd.Series:
+        """对单列数值做标准化，保留原始缺失值。"""
+        result = pd.to_numeric(series, errors="coerce").astype("float64")
+        valid_values = result.dropna()
+        if valid_values.empty:
+            return result
 
         if max_min:
-            min_val = s.min()
-            max_val = s.max()
-            k1 = min_val
-            k2 = max_val - min_val
+            base_value = valid_values.min()
+            divisor = valid_values.max() - base_value
         else:
-            mean_val = s.mean()
-            std_val = s.std()
-            k1 = mean_val
-            k2 = std_val
+            base_value = valid_values.mean()
+            divisor = valid_values.std()
 
-        if (col_name and k2 != 0) or (k2.all() != 0):
-            return (s - k1) / k2
+        if pd.isna(divisor) or divisor == 0:
+            zero_series = pd.Series(0.0, index=series.index, name=series.name, dtype="float64")
+            zero_series[result.isna()] = np.nan
+            return zero_series
 
-        return s * 0
+        return (result - base_value) / divisor
 
 
 class Utils(_BaseAccessor):
-    """
-    工具方法模块
-    """
-    def __init__(self, pandas_obj):
-        super().__init__(pandas_obj)
+    """工具方法模块。"""
 
     @staticmethod
-    def map(from_data: list, to_map: list, default = np.nan) -> np.ndarray:
-        """
-        条件映射：根据多个条件返回对应值
-        :param from_data: 条件列表，每个元素为布尔条件
-        :param to_map: 值列表，与 from_data 一一对应
-        :param default: 默认值，当所有条件都不满足时返回
-        :return: 映射后的数组
-        """
+    def map(from_data: list, to_map: list, default=np.nan) -> np.ndarray:
+        """条件映射。"""
         return np.select(from_data, to_map, default=default)
 
-    def save(self, path: str, index: bool = False, engine: Literal["auto", "pyarrow", "fastparquet"] = "pyarrow") -> None:
-        """
-        保存 DataFrame 为 parquet 格式
-        :param path: 保存路径
-        :param index: 是否保存索引
-        :param engine: 保存引擎，默认 "pyarrow"
-        """
+    def save(
+        self,
+        path: str,
+        index: bool = False,
+        engine: ParquetEngine = "pyarrow",
+    ) -> None:
+        """将 DataFrame 保存为 parquet 文件。"""
         self._obj.to_parquet(path, engine=engine, index=index)
 
     def get_weekday(self, datetime_col: str) -> pd.Series:
-        """
-        从已转换的 datetime 列中提取星期几
-        :param datetime_col: 已转换为 datetime 类型的列名
-        :return: 星期几（1=周一，7=周日）
-        """
-        if datetime_col not in self._obj.columns:
-            raise ValueError(f"错误：数据中不存在列 '{datetime_col}'，请检查列名是否正确")
+        """从 datetime 列中提取星期几，返回 1 到 7。"""
+        self._ensure_columns(datetime_col)
 
-        if self._obj[datetime_col].dtype != 'datetime64[ns]':
-            raise AttributeError(f"错误：列 '{datetime_col}' 不是 datetime 类型！请先调用 to_datetime() 转换")
+        if not pd.api.types.is_datetime64_any_dtype(self._obj[datetime_col]):
+            raise AttributeError(
+                f"错误：列 '{datetime_col}' 不是 datetime 类型，请先调用 to_datetime() 转换",
+            )
 
         return self._obj[datetime_col].dt.dayofweek + 1
 
 
 @pd.api.extensions.register_dataframe_accessor("ljp_f")
-class Ljp_dataframe(Info, Clean, Convert, Process, Analysis, Utils):
+class Ljp_dataframe:
     """
-    自定义 DataFrame 访问器，按功能模块封装数据分析常用工具函数
-    使用方式：
-    - 方式1（推荐）：df.ljp_f.模块名.方法名() - 按模块分类调用，结构清晰
-    - 方式2：df.ljp_f.方法名() - 直接调用所有方法，快捷方便
-    
-    模块列表：
-    - info: 信息查看（summary, describe, check_na, check_duplicates, check）
-    - clean: 数据清洗（fill_na, drop_duplicates, drop_cols, get_outliers）
-    - convert: 类型转换（dtypes, auto_int, auto_types, to_datetime）
-    - process: 数据处理（filter, sample, group_summary, value_counts, sort, rename_cols, select_cols, get_top_n）
-    - analysis: 统计分析（corr, stand）
-    - utils: 工具方法（map, save, add_weekday）
+    DataFrame 访问器。
+
+    支持两种调用方式:
+    - `df.ljp_f.info.summary()`：按模块调用，结构更清晰
+    - `df.ljp_f.summary()`：直接快捷调用，兼容原有使用习惯
     """
-    def __init__(self, pandas_obj):
-        self._obj: pd.DataFrame = pandas_obj
 
-        self.info = Info(pandas_obj)
-        self.clean = Clean(pandas_obj)
-        self.convert = Convert(pandas_obj)
-        self.process = Process(pandas_obj)
-        self.analysis = Analysis(pandas_obj)
-        self.utils = Utils(pandas_obj)
+    _accessor_classes = {
+        "info": Info,
+        "clean": Clean,
+        "convert": Convert,
+        "process": Process,
+        "analysis": Analysis,
+        "utils": Utils,
+    }
 
-    @staticmethod
-    def map(from_data: list, to_map: list, default = np.nan) -> np.ndarray:
-        """
-        条件映射：根据多个条件返回对应值（静态方法，可直接调用）
-        :param from_data: 条件列表，每个元素为布尔条件
-        :param to_map: 值列表，与 from_data 一一对应
-        :param default: 默认值，当所有条件都不满足时返回
-        :return: 映射后的数组
-        """
-        return np.select(from_data, to_map, default=default)
+    def __init__(self, pandas_obj: pd.DataFrame):
+        self._obj = pandas_obj
+        self._accessors = {
+            name: accessor_class(pandas_obj)
+            for name, accessor_class in self._accessor_classes.items()
+        }
 
-    def help(self,mode=None) -> dict[str, list[str]]:
-        """
-        显示所有可用方法，按模块分类
-        :return: 包含各模块方法列表的字典
-        """
+        for name, accessor in self._accessors.items():
+            setattr(self, name, accessor)
+
+        self._method_map = self._build_method_map()
+
+    def _build_method_map(self) -> dict[str, _BaseAccessor]:
+        """建立平铺方法名到模块实例的映射，便于快捷调用。"""
+        method_map: dict[str, _BaseAccessor] = {}
+
+        for accessor in self._accessors.values():
+            for method_name in accessor._help():
+                if method_name in method_map:
+                    raise AttributeError(f"错误：访问器方法名冲突 '{method_name}'")
+                method_map[method_name] = accessor
+
+        return method_map
+
+    def __getattr__(self, name: str):
+        """将未命中的公开方法委托到具体模块。"""
+        if name.startswith("_"):
+            raise AttributeError(name)
+
+        accessor = self._method_map.get(name)
+        if accessor is None:
+            raise AttributeError(f"'Ljp_dataframe' 对象没有属性 '{name}'")
+
+        return getattr(accessor, name)
+
+    def __dir__(self) -> list[str]:
+        """补充自动补全列表，方便在交互环境中查看方法。"""
+        return sorted(set(super().__dir__()) | set(self._accessors) | set(self._method_map))
+
+    def help(self, mode: bool | None = None) -> dict[str, list[str]] | list[str]:
+        """查看全部可用方法，支持分组和扁平两种展示形式。"""
         if mode:
             return {
-                "info": self.info._help(),
-                "clean": self.clean._help(),
-                "convert": self.convert._help(),
-                "process": self.process._help(),
-                "analysis": self.analysis._help(),
-                "utils": self.utils._help()
+                name: accessor._help()
+                for name, accessor in self._accessors.items()
             }
-        return self._help()
+
+        return ["help", *sorted(self._method_map)]
