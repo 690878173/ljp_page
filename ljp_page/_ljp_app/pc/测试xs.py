@@ -78,22 +78,4 @@ if __name__ == '__main__':
         'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 Edg/144.0.0.0',
         # 'cookie': 'cf_clearance=MymIAXMOMWmWJvpWnuF9piXzfYxfIEfOFO8RP8qIqaM-1768846130-1.2.1.1-nGy1BsLagrMntqsr9u51EkcaHFqBh6PJttYzdhckW3Lou4rpmtyK3ftFA5wLEiTyRkFlQBJ8JlDklnmxj7kUVMiN0TeoVPGfcUl2CCbkkyVTE9i7f0DQEsgzdPxWSvlbe7VR2f35x41Y2tz46LtSNXOiG8qKE1uSgwbxckvnZm0ox.VmB.0li5.QlqbbcxzjjDjlPRHfEFWyscevCl6JsNEy_XUDJTUT8riSAzrvTlF3ldbV.Is1nf3rNmYzbqtD',
     }
-    config = YY.Config(
-        base_url=r'https://www.bz777777.net',
-        p1_url=r'https://www.bz777777.net/shuku/6-size-0-{}.html',
-        p2_url=r'https://www.bz777777.net{}',
-        mode='mode2',
-        headers=headers,
-        cookies=cookies,
-        save_path=r'E:/鐖櫕/test',
-        start_id=9,
-        end_id=30,
-        max_workers=5,
-        max_retries=5,
-    )
-    # from ljp_page.logger import Logger
-    # logger = Logger(log_level='DEBUG')
-    xs = YY(config)
-    UI = xs.UI(xs)
-    UI.run()
 

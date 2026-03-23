@@ -1,39 +1,42 @@
+import sys
 
-def war(func):
-    def wrapper(*args, **kwargs):
-        dc = {
-            'args': args,
-            'kwargs': kwargs,
-        }
-        print(dc)
-        n2 = kwargs.get('n2')
-        _init_dic = {
-            'n2': n2,
-            **kwargs
-        }
-        return func(*args, **_init_dic)
-    return wrapper
+import requests
+import zipfile
+import os
 
+url = 'https://codeload.github.com/690878173/ljp_page/zip/refs/heads/master'
+# r = requests.get(url)
+# with open("pkg.zip", "wb") as f:
+#     f.write(r.content)
+#
+# with zipfile.ZipFile("pkg.zip", "r") as zip_ref:
+#     zip_ref.extractall(".")
+#
+# # 3. 安装
+# os.system(f"{sys.executable} -m pip install ./ljp_package-main")
 
-
-
-
-
-@war
-def get_n(n,n2=2,n3=3,*args,**kwargs):
-    dc = {
-        'n':n,
-        'n2':n2,
-        'n3':n3,
-        'args':args,
-        'kwargs':kwargs,
-    }
-    print(dc)
-    if n2==2:
-        print('n2:2')
+print("安装完成")
 
 
+def _install():
+    import sys
+    import subprocess
+    print(sys.executable)
+    urls = [
+        "git+https://gitee.com/pangjinglin/ljp_package.git",
+        "git+https://github.com/690878173/ljp_page.git"
+    ]
+    for url in urls:
+        try:
+            subprocess.run([
+                sys.executable, "-m", "pip", "install",
+                "--no-deps",
+                "--upgrade",
+                url
+            ], check=True)
+            print(f"安装成功: {url}")
+            return
+        except:
+            print(f"失败，尝试下一个源: {url}")
 
-
-
-get_n(1,n3=2,n4=7)
+    print("全部源都失败")
