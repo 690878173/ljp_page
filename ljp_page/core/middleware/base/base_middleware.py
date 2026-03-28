@@ -1,16 +1,19 @@
-# 03-28-16-28-21
+# 03-28-16-49-10
 """请求中间件基础协议（同步/异步）。"""
 
 from __future__ import annotations
 
 from abc import ABC
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 from ....config.request_config.session_config import (
     LjpRequestException,
     LjpResponse,
     RequestContext,
 )
+
+SyncNextHandler = Callable[[RequestContext], LjpResponse]
+AsyncNextHandler = Callable[[RequestContext], Awaitable[LjpResponse]]
 
 
 class MiddlewareBase(ABC):
@@ -21,6 +24,22 @@ class MiddlewareBase(ABC):
 
 class SyncMiddleware(MiddlewareBase):
     """同步中间件基础协议。"""
+
+    def handle(
+        self,
+        context: RequestContext,
+        next_handler: SyncNextHandler,
+        session: Any,
+    ) -> LjpResponse:
+        """默认同步中间件链式处理实现。"""
+
+        try:
+            self.before_request(context, session)
+            response = next_handler(context)
+            return self.after_response(context, response, session)
+        except LjpRequestException as error:
+            self.on_error(context, error, session)
+            raise
 
     def before_request(self, context: RequestContext, session: Any) -> None:
         return None
@@ -45,6 +64,22 @@ class SyncMiddleware(MiddlewareBase):
 class AsyncMiddleware(MiddlewareBase):
     """异步中间件基础协议。"""
 
+    async def handle(
+        self,
+        context: RequestContext,
+        next_handler: AsyncNextHandler,
+        session: Any,
+    ) -> LjpResponse:
+        """默认异步中间件链式处理实现。"""
+
+        try:
+            await self.before_request(context, session)
+            response = await next_handler(context)
+            return await self.after_response(context, response, session)
+        except LjpRequestException as error:
+            await self.on_error(context, error, session)
+            raise
+
     async def before_request(self, context: RequestContext, session: Any) -> None:
         return None
 
@@ -63,3 +98,12 @@ class AsyncMiddleware(MiddlewareBase):
         session: Any,
     ) -> None:
         return None
+
+
+__all__ = [
+    "AsyncMiddleware",
+    "AsyncNextHandler",
+    "MiddlewareBase",
+    "SyncMiddleware",
+    "SyncNextHandler",
+]

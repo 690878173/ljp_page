@@ -7,7 +7,7 @@ import threading
 import time
 import uuid
 from copy import deepcopy
-from typing import Any, Literal, Mapping, Sequence
+from typing import Any, Awaitable, Callable, Literal, Mapping, Sequence
 from urllib.parse import urljoin, urlparse
 
 import aiohttp
@@ -293,6 +293,12 @@ class SyncSession(SessionBase, SyncVerbMixin):
             chain.append(ResponseMiddleware())
         return chain
 
+    def use(self, middleware: SyncMiddleware) -> "SyncSession":
+        """按顺序挂载同步中间件。"""
+
+        self.middlewares.append(middleware)
+        return self
+
     def get_native_session(self) -> requests.Session:
         if isinstance(self.adapter, RequestsTransportAdapter):
             return self.adapter.get_native_session()
@@ -335,6 +341,63 @@ class SyncSession(SessionBase, SyncVerbMixin):
             original_exception=exc,
         )
 
+    def _notify_error_middlewares(
+        self,
+        context: RequestContext,
+        error: LjpRequestException,
+    ) -> None:
+        for middleware in reversed(self.middlewares):
+            middleware.on_error(context, error, self)
+
+    def _send_once(
+        self,
+        context: RequestContext,
+        *,
+        attempt: int,
+        total_start: float,
+    ) -> LjpResponse:
+        """真正触发一次底层发送，并把异常统一映射为请求异常。"""
+
+        try:
+            adapter_response = self.adapter.send(context)
+        except Exception as exc:
+            raise self._map_exception(
+                exc,
+                context=context,
+                retries=attempt,
+                elapsed=time.perf_counter() - total_start,
+            ) from exc
+
+        self._store_cookies(adapter_response.cookies)
+        return self._build_response(
+            context=context,
+            adapter_response=adapter_response,
+            elapsed=time.perf_counter() - total_start,
+            retries=attempt,
+        )
+
+    def _build_chain(
+        self,
+        sender: Callable[[RequestContext], LjpResponse],
+    ) -> Callable[[RequestContext], LjpResponse]:
+        """构建同步中间件责任链。"""
+
+        chain = sender
+        for middleware in reversed(self.middlewares):
+            next_handler = chain
+
+            def _make_layer(
+                mw: SyncMiddleware,
+                nxt: Callable[[RequestContext], LjpResponse],
+            ) -> Callable[[RequestContext], LjpResponse]:
+                def _layer(ctx: RequestContext) -> LjpResponse:
+                    return mw.handle(ctx, nxt, self)
+
+                return _layer
+
+            chain = _make_layer(middleware, next_handler)
+        return chain
+
     def request(
         self,
         method: str,
@@ -357,39 +420,26 @@ class SyncSession(SessionBase, SyncVerbMixin):
                 attempt=attempt,
                 native_session=native_session,
             )
-            for middleware in self.middlewares:
-                middleware.before_request(context, self)
+
+            def _sender(ctx: RequestContext) -> LjpResponse:
+                return self._send_once(ctx, attempt=attempt, total_start=total_start)
+
+            pipeline = self._build_chain(_sender)
 
             try:
-                adapter_response = self.adapter.send(context)
-                self._store_cookies(adapter_response.cookies)
-
-                response = self._build_response(
-                    context=context,
-                    adapter_response=adapter_response,
-                    elapsed=time.perf_counter() - total_start,
-                    retries=attempt,
-                )
-                for middleware in reversed(self.middlewares):
-                    response = middleware.after_response(context, response, self)
-
-                if (
-                    self.retry_middleware is not None
-                    and attempt < total_retries
-                    and self.retry_middleware.should_retry_response(context, response)
-                ):
-                    self.retry_middleware.wait(attempt)
-                    continue
-
-                self._record_success(response.elapsed, attempt)
-                return response
+                response = pipeline(context)
             except Exception as exc:
-                mapped = self._map_exception(
-                    exc,
-                    context=context,
-                    retries=attempt,
-                    elapsed=time.perf_counter() - total_start,
-                )
+                if isinstance(exc, LjpRequestException):
+                    mapped = exc
+                else:
+                    mapped = self._map_exception(
+                        exc,
+                        context=context,
+                        retries=attempt,
+                        elapsed=time.perf_counter() - total_start,
+                    )
+                    self._notify_error_middlewares(context, mapped)
+
                 if (
                     self.retry_middleware is not None
                     and attempt < total_retries
@@ -399,9 +449,18 @@ class SyncSession(SessionBase, SyncVerbMixin):
                     continue
 
                 self._record_failure(mapped.elapsed or 0.0, attempt)
-                for middleware in reversed(self.middlewares):
-                    middleware.on_error(context, mapped, self)
                 raise mapped from exc
+
+            if (
+                self.retry_middleware is not None
+                and attempt < total_retries
+                and self.retry_middleware.should_retry_response(context, response)
+            ):
+                self.retry_middleware.wait(attempt)
+                continue
+
+            self._record_success(response.elapsed, attempt)
+            return response
 
         raise AssertionError("unreachable")
 
@@ -449,6 +508,12 @@ class AsyncSession(SessionBase, AsyncVerbMixin):
             chain.append(AsyncResponseMiddleware())
         return chain
 
+    def use(self, middleware: AsyncMiddleware) -> "AsyncSession":
+        """按顺序挂载异步中间件。"""
+
+        self.middlewares.append(middleware)
+        return self
+
     async def get_native_session(self) -> aiohttp.ClientSession:
         if isinstance(self.adapter, AiohttpTransportAdapter):
             return await self.adapter.ensure_session()
@@ -491,6 +556,63 @@ class AsyncSession(SessionBase, AsyncVerbMixin):
             original_exception=exc,
         )
 
+    async def _notify_error_middlewares(
+        self,
+        context: RequestContext,
+        error: LjpRequestException,
+    ) -> None:
+        for middleware in reversed(self.middlewares):
+            await middleware.on_error(context, error, self)
+
+    async def _send_once(
+        self,
+        context: RequestContext,
+        *,
+        attempt: int,
+        total_start: float,
+    ) -> LjpResponse:
+        """真正触发一次底层发送，并把异常统一映射为请求异常。"""
+
+        try:
+            adapter_response = await self.adapter.send(context)
+        except Exception as exc:
+            raise self._map_exception(
+                exc,
+                context=context,
+                retries=attempt,
+                elapsed=time.perf_counter() - total_start,
+            ) from exc
+
+        self._store_cookies(adapter_response.cookies)
+        return self._build_response(
+            context=context,
+            adapter_response=adapter_response,
+            elapsed=time.perf_counter() - total_start,
+            retries=attempt,
+        )
+
+    def _build_chain(
+        self,
+        sender: Callable[[RequestContext], Awaitable[LjpResponse]],
+    ) -> Callable[[RequestContext], Awaitable[LjpResponse]]:
+        """构建异步中间件责任链。"""
+
+        chain = sender
+        for middleware in reversed(self.middlewares):
+            next_handler = chain
+
+            def _make_layer(
+                mw: AsyncMiddleware,
+                nxt: Callable[[RequestContext], Awaitable[LjpResponse]],
+            ) -> Callable[[RequestContext], Awaitable[LjpResponse]]:
+                async def _layer(ctx: RequestContext) -> LjpResponse:
+                    return await mw.handle(ctx, nxt, self)
+
+                return _layer
+
+            chain = _make_layer(middleware, next_handler)
+        return chain
+
     async def request(
         self,
         method: str,
@@ -513,39 +635,30 @@ class AsyncSession(SessionBase, AsyncVerbMixin):
                 attempt=attempt,
                 native_session=native_session,
             )
-            for middleware in self.middlewares:
-                await middleware.before_request(context, self)
+
+            async def _sender(ctx: RequestContext) -> LjpResponse:
+                return await self._send_once(
+                    ctx,
+                    attempt=attempt,
+                    total_start=total_start,
+                )
+
+            pipeline = self._build_chain(_sender)
 
             try:
-                adapter_response = await self.adapter.send(context)
-                self._store_cookies(adapter_response.cookies)
-
-                response = self._build_response(
-                    context=context,
-                    adapter_response=adapter_response,
-                    elapsed=time.perf_counter() - total_start,
-                    retries=attempt,
-                )
-                for middleware in reversed(self.middlewares):
-                    response = await middleware.after_response(context, response, self)
-
-                if (
-                    self.retry_middleware is not None
-                    and attempt < total_retries
-                    and self.retry_middleware.should_retry_response(context, response)
-                ):
-                    await self.retry_middleware.wait(attempt)
-                    continue
-
-                self._record_success(response.elapsed, attempt)
-                return response
+                response = await pipeline(context)
             except Exception as exc:
-                mapped = self._map_exception(
-                    exc,
-                    context=context,
-                    retries=attempt,
-                    elapsed=time.perf_counter() - total_start,
-                )
+                if isinstance(exc, LjpRequestException):
+                    mapped = exc
+                else:
+                    mapped = self._map_exception(
+                        exc,
+                        context=context,
+                        retries=attempt,
+                        elapsed=time.perf_counter() - total_start,
+                    )
+                    await self._notify_error_middlewares(context, mapped)
+
                 if (
                     self.retry_middleware is not None
                     and attempt < total_retries
@@ -555,9 +668,18 @@ class AsyncSession(SessionBase, AsyncVerbMixin):
                     continue
 
                 self._record_failure(mapped.elapsed or 0.0, attempt)
-                for middleware in reversed(self.middlewares):
-                    await middleware.on_error(context, mapped, self)
                 raise mapped from exc
+
+            if (
+                self.retry_middleware is not None
+                and attempt < total_retries
+                and self.retry_middleware.should_retry_response(context, response)
+            ):
+                await self.retry_middleware.wait(attempt)
+                continue
+
+            self._record_success(response.elapsed, attempt)
+            return response
 
         raise AssertionError("unreachable")
 
