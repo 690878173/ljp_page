@@ -9,11 +9,17 @@ import pytest
 import requests
 
 from ljp_page.config.request_config import get_request_config
+from ljp_page.config.request_config.session_config import (
+    LjpRequestException,
+    LjpResponse,
+    RequestContext,
+)
 from ljp_page.core.adapters import (
     AdapterResponse,
     AsyncTransportAdapter,
     SyncTransportAdapter,
 )
+from ljp_page.core.middleware import LoggingMiddleware
 from ljp_page.modules.request import AsyncSession, SyncSession
 from ljp_page.utils.logger.logger import Logger
 
@@ -68,6 +74,16 @@ class _RetryAsyncAdapter(AsyncTransportAdapter):
         return None
 
 
+class _CollectLogger:
+    """用于测试日志中间件等级过滤的采集器。"""
+
+    def __init__(self) -> None:
+        self.records: list[tuple[int, str]] = []
+
+    def log(self, level: int, message: str) -> None:
+        self.records.append((level, message))
+
+
 def test_numeric_logger_supports_enabled_levels(tmp_path: Path) -> None:
     log_path = tmp_path / "logger.log"
     logger = Logger(
@@ -81,6 +97,52 @@ def test_numeric_logger_supports_enabled_levels(tmp_path: Path) -> None:
     content = log_path.read_text(encoding="utf-8")
     assert "should_print" in content
     assert "should_not_print" not in content
+
+
+def test_logging_middleware_respects_enabled_levels() -> None:
+    config = get_request_config(log={"enabled_levels": [15]})
+    logger = _CollectLogger()
+    middleware = LoggingMiddleware(config, logger)
+    context = RequestContext(
+        trace_id="trace-test",
+        method="GET",
+        url="https://example.com",
+        headers={},
+        cookies={},
+        timeout=(1.0, 1.0),
+        allow_redirects=True,
+        stream=False,
+        verify_ssl=True,
+        proxy_url=None,
+        proxies=None,
+        attempt=0,
+    )
+    response = LjpResponse(
+        status_code=200,
+        headers={},
+        encoding="utf-8",
+        content=b"ok",
+        elapsed=0.1,
+        retries=0,
+        request=context,
+    )
+    error = LjpRequestException(
+        "error",
+        trace_id=context.trace_id,
+        method=context.method,
+        url=context.url,
+        category="network",
+    )
+
+    middleware.before_request(context, None)
+    middleware.after_response(context, response, None)
+    middleware.on_error(context, error, None)
+    assert logger.records == [
+        (
+            15,
+            "请求失败 trace_id=trace-test method=GET url=https://example.com category=network retries=0",
+        )
+    ]
 
 
 def test_sync_retry_middleware_works() -> None:
