@@ -1,5 +1,5 @@
 """Public playwright exports."""
 
-from ._ljp_network.playwright import Playwright
+from .modules.playwright import Playwright
 
 __all__ = ["Playwright"]

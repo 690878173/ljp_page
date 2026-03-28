@@ -1,4 +1,4 @@
-from ljp_page._ljp_data_analysis.ml.Classification.logistic_regression import (
+from ljp_page.data_analysis.ml.Classification.logistic_regression import (
     LogisticRegressionModel,
     logistic_regression_auto,
 )

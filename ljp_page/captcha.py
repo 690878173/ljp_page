@@ -1,5 +1,5 @@
 """Public captcha exports."""
 
-from ._ljp_network.captcha import yzm
+from .modules.captcha import yzm
 
 __all__ = ["yzm"]

@@ -1,6 +1,6 @@
 """Public pandas helper exports."""
 
-from .._ljp_data_analysis.pandas import (
+from ..data_analysis.pandas import (
     Analysis,
     Clean,
     Convert,

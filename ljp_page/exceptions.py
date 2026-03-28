@@ -1,6 +1,6 @@
 """Public exception exports."""
 
-from ._ljp_coro.exceptions import (
+from ljp_page.core.base.exceptions import (
     ALL_EXCEPTIONS,
     CaptchaException,
     ConfigError,

@@ -1,6 +1,6 @@
 """Public file utility exports."""
 
-from ._ljp_utils.file import (
+from .utils.file import (
     Directory,
     FileHandle,
     YsDirectory,

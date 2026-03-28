@@ -1,4 +1,4 @@
-from ljp_page._ljp_data_analysis.ml.Regression import (
+from ljp_page.data_analysis.ml.Regression import (
     CatBoostRegressionModel,
     LightGBMRegressionModel,
     LinearRegressionModel,

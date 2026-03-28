@@ -1,1 +1,1 @@
-from ._ljp_js import *
+from .jslib import *

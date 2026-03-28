@@ -1,12 +1,13 @@
 """Public request API exports."""
 
-from ._ljp_network.requests import (
+from .modules.request import (
     AsyncSession,
     Html,
     LjpRequestException,
     LjpResponse,
+    RequestContext,
     Requests,
-    SessionHooks,
+    SessionMetrics,
     SyncSession,
     create_session,
 )
@@ -16,8 +17,9 @@ __all__ = [
     "Html",
     "LjpRequestException",
     "LjpResponse",
+    "RequestContext",
     "Requests",
-    "SessionHooks",
+    "SessionMetrics",
     "SyncSession",
     "create_session",
 ]

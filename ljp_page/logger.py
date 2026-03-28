@@ -1,1 +1,1 @@
-from ljp_page._ljp_utils.logger.logger import Logger
+from ljp_page.utils.logger.logger import Logger
