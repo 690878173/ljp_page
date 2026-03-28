@@ -345,8 +345,9 @@ class SyncSession(SessionBase, SyncVerbMixin):
         self,
         context: RequestContext,
         error: LjpRequestException,
+        middlewares: Sequence[SyncMiddleware],
     ) -> None:
-        for middleware in reversed(self.middlewares):
+        for middleware in reversed(middlewares):
             middleware.on_error(context, error, self)
 
     def _send_once(
@@ -376,14 +377,15 @@ class SyncSession(SessionBase, SyncVerbMixin):
             retries=attempt,
         )
 
-    def _build_chain(
+    def _build_middleware_chain(
         self,
         sender: Callable[[RequestContext], LjpResponse],
+        middlewares: Sequence[SyncMiddleware],
     ) -> Callable[[RequestContext], LjpResponse]:
         """构建同步中间件责任链。"""
 
         chain = sender
-        for middleware in reversed(self.middlewares):
+        for middleware in reversed(middlewares):
             next_handler = chain
 
             def _make_layer(
@@ -410,6 +412,12 @@ class SyncSession(SessionBase, SyncVerbMixin):
         delay = max(0.0, self.config.request_delay)
         if delay > 0:
             time.sleep(delay)
+        request_middlewares = kwargs.pop("middlewares", None)
+        active_middlewares = (
+            list(request_middlewares)
+            if request_middlewares is not None
+            else list(self.middlewares)
+        )
 
         total_retries = self.config.retry.total if self.retry_middleware else 0
         for attempt in range(total_retries + 1):
@@ -424,7 +432,7 @@ class SyncSession(SessionBase, SyncVerbMixin):
             def _sender(ctx: RequestContext) -> LjpResponse:
                 return self._send_once(ctx, attempt=attempt, total_start=total_start)
 
-            pipeline = self._build_chain(_sender)
+            pipeline = self._build_middleware_chain(_sender, active_middlewares)
 
             try:
                 response = pipeline(context)
@@ -438,7 +446,7 @@ class SyncSession(SessionBase, SyncVerbMixin):
                         retries=attempt,
                         elapsed=time.perf_counter() - total_start,
                     )
-                    self._notify_error_middlewares(context, mapped)
+                    self._notify_error_middlewares(context, mapped, active_middlewares)
 
                 if (
                     self.retry_middleware is not None
@@ -560,8 +568,9 @@ class AsyncSession(SessionBase, AsyncVerbMixin):
         self,
         context: RequestContext,
         error: LjpRequestException,
+        middlewares: Sequence[AsyncMiddleware],
     ) -> None:
-        for middleware in reversed(self.middlewares):
+        for middleware in reversed(middlewares):
             await middleware.on_error(context, error, self)
 
     async def _send_once(
@@ -591,14 +600,15 @@ class AsyncSession(SessionBase, AsyncVerbMixin):
             retries=attempt,
         )
 
-    def _build_chain(
+    def _build_middleware_chain(
         self,
         sender: Callable[[RequestContext], Awaitable[LjpResponse]],
+        middlewares: Sequence[AsyncMiddleware],
     ) -> Callable[[RequestContext], Awaitable[LjpResponse]]:
         """构建异步中间件责任链。"""
 
         chain = sender
-        for middleware in reversed(self.middlewares):
+        for middleware in reversed(middlewares):
             next_handler = chain
 
             def _make_layer(
@@ -625,6 +635,12 @@ class AsyncSession(SessionBase, AsyncVerbMixin):
         delay = max(0.0, self.config.request_delay)
         if delay > 0:
             await asyncio.sleep(delay)
+        request_middlewares = kwargs.pop("middlewares", None)
+        active_middlewares = (
+            list(request_middlewares)
+            if request_middlewares is not None
+            else list(self.middlewares)
+        )
 
         total_retries = self.config.retry.total if self.retry_middleware else 0
         for attempt in range(total_retries + 1):
@@ -643,7 +659,7 @@ class AsyncSession(SessionBase, AsyncVerbMixin):
                     total_start=total_start,
                 )
 
-            pipeline = self._build_chain(_sender)
+            pipeline = self._build_middleware_chain(_sender, active_middlewares)
 
             try:
                 response = await pipeline(context)
@@ -657,7 +673,11 @@ class AsyncSession(SessionBase, AsyncVerbMixin):
                         retries=attempt,
                         elapsed=time.perf_counter() - total_start,
                     )
-                    await self._notify_error_middlewares(context, mapped)
+                    await self._notify_error_middlewares(
+                        context,
+                        mapped,
+                        active_middlewares,
+                    )
 
                 if (
                     self.retry_middleware is not None
