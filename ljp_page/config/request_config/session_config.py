@@ -72,12 +72,25 @@ class LjpResponse:
     status_code: int
     headers: dict[str, str]
     encoding: str | None
-    content: bytes
+    content: bytes = field(repr=False)
     elapsed: float
     retries: int
     request: RequestContext
     _text_cache: str | None = field(default=None, init=False, repr=False)
     _json_cache: Any = field(default=_JSON_UNSET, init=False, repr=False)
+
+    def __repr__(self) -> str:
+        return (
+            "LjpResponse("
+            f"status_code={self.status_code}, "
+            f"ok={self.ok}, "
+            f"elapsed={self.elapsed:.4f}, "
+            f"retries={self.retries}, "
+            f"method='{self.request.method}', "
+            f"url='{self.request.url}', "
+            f"content_length={len(self.content)}"
+            ")"
+        )
 
     @property
     def http_status(self) -> int:

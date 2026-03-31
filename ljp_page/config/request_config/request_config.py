@@ -67,7 +67,7 @@ DEFAULT_LEVEL_ALIASES: dict[str, int] = {
 class TimeoutConfig:
     """连接与读取超时配置。"""
 
-    connect: float = 5.0
+    connect: float = 10.0
     read: float = 10.0
 
     @property
@@ -92,7 +92,7 @@ class TimeoutConfig:
 class RetryConfig:
     """重试策略配置。"""
 
-    total: int = 3
+    total: int = 2
     backoff_factor: float = 0.5
     max_backoff: float = 8.0
     status_forcelist: list[int] = field(

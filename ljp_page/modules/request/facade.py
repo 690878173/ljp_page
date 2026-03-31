@@ -85,7 +85,7 @@ class Requests:
     def _normalize_return_type(return_type: str | None, read_content: bool) -> str:
         if read_content:
             return "content"
-        return return_type or "text"
+        return return_type or "response"
 
     @staticmethod
     def _unwrap_response(response: LjpResponse, return_type: str) -> Any:
