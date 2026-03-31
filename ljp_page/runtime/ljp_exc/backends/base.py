@@ -4,7 +4,7 @@ from __future__ import annotations
 from concurrent.futures import Future
 from typing import Any
 
-from ljp_page.core.base.base_class import Ljp_BaseClass
+from ljp_page.core.base.Ljp_base_class import Ljp_BaseClass
 from ..task import BoundTask, TaskSubmitConfig
 
 

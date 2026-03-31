@@ -5,7 +5,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, Callable, Iterable, Optional, TypeVar, cast
 
-from ljp_page.core.base.base_class import Ljp_BaseClass
+from ljp_page.core.base.Ljp_base_class import Ljp_BaseClass
 
 _T = TypeVar("_T")
 

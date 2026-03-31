@@ -4,106 +4,84 @@
 from __future__ import annotations
 
 from abc import ABC
-from typing import Any, Awaitable, Callable
+from dataclasses import dataclass, field
+from typing import Any, Awaitable, Callable, Dict
 
-from ....config.request_config.session_config import (
+from ljp_page.modules.request.config.request_config import (
     LjpRequestException,
     LjpResponse,
     RequestContext,
 )
+_STR_BASE = 'base'
+
+@dataclass
+class Ljp_MiddlewareContext:
+    input: Any
+    output: Any
+    state: Dict[str, Any] = field(default_factory=dict)
+
+
 
 SyncNextHandler = Callable[[RequestContext], LjpResponse]
 AsyncNextHandler = Callable[[RequestContext], Awaitable[LjpResponse]]
 
 
-class MiddlewareBase(ABC):
+class Ljp_MiddlewareBase(ABC):
     """中间件根基类。"""
 
-    name = "base"
+    name = _STR_BASE
 
 
-class SyncMiddleware(MiddlewareBase):
-    """同步中间件基础协议。"""
+class Ljp_SyncMiddleware(Ljp_MiddlewareBase):
 
-    def handle(
-        self,
-        context: RequestContext,
-        next_handler: SyncNextHandler,
-        session: Any,
-    ) -> LjpResponse:
-        """默认同步中间件链式处理实现。"""
-
+    def handle(self,
+               ctx:Ljp_MiddlewareContext,
+               next_handler):
         try:
-            self.before_request(context, session)
-            response = next_handler(context)
-            return self.after_response(context, response, session)
-        except LjpRequestException as error:
-            self.on_error(context, error, session)
+            ctx = self.before(ctx)
+            response = next_handler(ctx)
+            return self.after(ctx, response)
+        except Exception as error:
+            self.on_error(ctx, error)
             raise
 
-    def before_request(self, context: RequestContext, session: Any) -> None:
-        return None
+    def before(self, ctx: Ljp_MiddlewareContext):
+        return ctx
 
-    def after_response(
-        self,
-        context: RequestContext,
-        response: LjpResponse,
-        session: Any,
-    ) -> LjpResponse:
+    def after(self, ctx, response):
         return response
 
-    def on_error(
-        self,
-        context: RequestContext,
-        error: LjpRequestException,
-        session: Any,
-    ) -> None:
+    def on_error(self, ctx, error):
         return None
 
 
-class AsyncMiddleware(MiddlewareBase):
-    """异步中间件基础协议。"""
+class Ljp_AsyncMiddleware(Ljp_MiddlewareBase):
 
     async def handle(
-        self,
-        context: RequestContext,
-        next_handler: AsyncNextHandler,
-        session: Any,
-    ) -> LjpResponse:
-        """默认异步中间件链式处理实现。"""
-
+            self,
+            ctx,
+            next_handler: AsyncNextHandler,
+    ):
         try:
-            await self.before_request(context, session)
-            response = await next_handler(context)
-            return await self.after_response(context, response, session)
-        except LjpRequestException as error:
-            await self.on_error(context, error, session)
+            await self.before(ctx)
+            response = await next_handler(ctx)
+            return await self.after(ctx, response)
+        except Exception as error:
+            await self.on_error(ctx, error)
             raise
 
-    async def before_request(self, context: RequestContext, session: Any) -> None:
-        return None
+    async def before(self, ctx):
+        return ctx
 
-    async def after_response(
-        self,
-        context: RequestContext,
-        response: LjpResponse,
-        session: Any,
-    ) -> LjpResponse:
+    async def after(self, ctx, response):
         return response
 
-    async def on_error(
-        self,
-        context: RequestContext,
-        error: LjpRequestException,
-        session: Any,
-    ) -> None:
+    async def on_error(self, ctx, error):
         return None
-
-
 __all__ = [
-    "AsyncMiddleware",
     "AsyncNextHandler",
-    "MiddlewareBase",
-    "SyncMiddleware",
+    "Ljp_MiddlewareBase",
     "SyncNextHandler",
+    "Ljp_SyncMiddleware",
+    "Ljp_MiddlewareContext",
 ]

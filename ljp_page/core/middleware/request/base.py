@@ -1,13 +1,14 @@
-# 03-28-16-28-21
+
 """请求中间件基类。"""
 
 from __future__ import annotations
 
-from ..base import AsyncMiddleware, SyncMiddleware
-from ....config.request_config.session_config import RequestContext
+from ..base import Ljp_SyncMiddleware,Ljp_AsyncMiddleware
+
+from ljp_page.modules.request.config.request_config import RequestContext
 
 
-class RequestMiddlewareBase(SyncMiddleware):
+class RequestMiddlewareBase(Ljp_SyncMiddleware):
     """同步请求中间件基类。"""
 
     name = "request_base"
@@ -20,7 +21,7 @@ class RequestMiddlewareBase(SyncMiddleware):
         context.headers.setdefault("X-Trace-Id", context.trace_id)
 
 
-class AsyncRequestMiddlewareBase(AsyncMiddleware):
+class AsyncRequestMiddlewareBase(Ljp_AsyncMiddleware):
     """异步请求中间件基类。"""
 
     name = "request_base_async"

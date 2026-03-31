@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ....config.request_config.session_config import RequestContext
+from ljp_page.modules.request.config.request_config import RequestContext
 from .base import AsyncRequestMiddlewareBase, RequestMiddlewareBase
 
 
@@ -14,7 +14,7 @@ class RequestMiddleware(RequestMiddlewareBase):
 
     name = "request"
 
-    def before_request(self, context: RequestContext, session: Any) -> None:
+    def before_request(self, context: RequestContext) -> None:
         self.prepare_context(context)
 
 
@@ -23,5 +23,5 @@ class AsyncRequestMiddleware(AsyncRequestMiddlewareBase):
 
     name = "request_async"
 
-    async def before_request(self, context: RequestContext, session: Any) -> None:
+    async def before_request(self, context: RequestContext) -> None:
         self.prepare_context(context)

@@ -1,11 +1,11 @@
-# 03-28-16-28-21
+
 """响应中间件实现。"""
 
 from __future__ import annotations
 
 from typing import Any
 
-from ....config.request_config.session_config import LjpResponse, RequestContext
+from ljp_page.modules.request.config.request_config import LjpResponse, RequestContext
 from .base import AsyncResponseMiddlewareBase, ResponseMiddlewareBase
 
 
@@ -14,11 +14,10 @@ class ResponseMiddleware(ResponseMiddlewareBase):
 
     name = "response"
 
-    def after_response(
+    def after(
         self,
         context: RequestContext,
         response: LjpResponse,
-        session: Any,
     ) -> LjpResponse:
         return self.attach_trace_id(context, response)
 
@@ -28,10 +27,9 @@ class AsyncResponseMiddleware(AsyncResponseMiddlewareBase):
 
     name = "response_async"
 
-    async def after_response(
+    async def after(
         self,
         context: RequestContext,
         response: LjpResponse,
-        session: Any,
     ) -> LjpResponse:
         return self.attach_trace_id(context, response)

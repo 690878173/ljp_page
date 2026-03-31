@@ -9,7 +9,7 @@ import re
 from typing import Any, Dict
 
 from ....logger import Logger
-from ljp_page.core.base.base_class import Ljp_BaseClass
+from ljp_page.core.base.Ljp_base_class import Ljp_BaseClass
 
 from .models import P2Result, P3Result
 

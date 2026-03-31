@@ -9,7 +9,7 @@ from typing import Any, List, Tuple
 
 from ....exceptions import MeetCheckError, No, Notfound
 from ....logger import Logger
-from ljp_page.core.base.base_class import Ljp_Decorator
+from ljp_page.core.base.Ljp_base_class import Ljp_Decorator
 
 from .manager_base import BaseManager
 from .runtime_base import BasePc

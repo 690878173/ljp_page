@@ -7,7 +7,7 @@ import asyncio
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Iterable, Sequence
 
-from ljp_page.core.base.base_class import Ljp_BaseClass
+from ljp_page.core.base.Ljp_base_class import Ljp_BaseClass
 from ljp_page.runtime.ljp_exc.exc import LJPExc
 from ljp_page.runtime.ljp_exc.task import TaskHandle
 

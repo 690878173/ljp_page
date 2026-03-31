@@ -6,36 +6,22 @@ from __future__ import annotations
 import asyncio
 import time
 
-from ....config.request_config import RequestConfig
-from ....config.request_config.session_config import (
+from ljp_page.modules.request.config.request_config import (
     LjpRequestException,
     LjpResponse,
     RequestContext,
 )
-from ..base import AsyncMiddleware, MiddlewareBase, SyncMiddleware
+from ljp_page.config.Ljp_config import LjpConfig
+from ..base import AsyncMiddleware, Ljp_MiddlewareBase, SyncMiddleware
 
 
-class RetryMiddlewareBase(MiddlewareBase):
+class RetryMiddlewareBase(Ljp_MiddlewareBase):
     """重试中间件通用基类。"""
 
     name = "retry_base"
 
-    def __init__(self, config: RequestConfig) -> None:
+    def __init__(self, config: LjpConfig) -> None:
         self.config = config
-
-    def should_retry_response(self, context: RequestContext, response: LjpResponse) -> bool:
-        retry = self.config.retry
-        return (
-            context.method in retry.allowed_methods
-            and response.status_code in retry.status_forcelist
-        )
-
-    def should_retry_exception(self, context: RequestContext, error: LjpRequestException) -> bool:
-        retry = self.config.retry
-        return (
-            context.method in retry.allowed_methods
-            and error.category in retry.retry_on_exceptions
-        )
 
     def calculate_delay(self, attempt: int) -> float:
         """根据指数退避策略计算等待时长。"""
@@ -66,3 +52,5 @@ class AsyncRetryMiddlewareBase(RetryMiddlewareBase, AsyncMiddleware):
         delay = self.calculate_delay(attempt)
         if delay > 0:
             await asyncio.sleep(delay)
+
+

@@ -4,7 +4,7 @@
 from .base import (
     AsyncMiddleware,
     AsyncNextHandler,
-    MiddlewareBase,
+    Ljp_MiddlewareBase,
     SyncMiddleware,
     SyncNextHandler,
 )
@@ -21,7 +21,7 @@ __all__ = [
     "AsyncResponseMiddleware",
     "AsyncRetryMiddleware",
     "LoggingMiddleware",
-    "MiddlewareBase",
+    "Ljp_MiddlewareBase",
     "RequestMiddleware",
     "ResponseMiddleware",
     "SyncMiddleware",

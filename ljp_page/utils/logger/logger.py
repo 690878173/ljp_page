@@ -9,7 +9,7 @@ from threading import RLock
 from typing import Iterable, Mapping
 
 from ...config.request_config import DEFAULT_LEVEL_ALIASES, DEFAULT_LEVEL_NAMES
-from ljp_page.core.base.base_class import Ljp_BaseClass
+from ljp_page.core.base.Ljp_base_class import Ljp_BaseClass
 
 
 class Logger(Ljp_BaseClass):

@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional
 from ....file import Directory, FileHandle
 from ....logger import Logger
 from ....modules.request import Requests
-from ljp_page.core.base.base_class import Ljp_BaseClass
+from ljp_page.core.base.Ljp_base_class import Ljp_BaseClass
 
 from .models import Mode, P1Result, P2ParseResult, P2Result, P3ParseResult, P3Result, PcConfig
 from .runtime_executor import CrawlerRuntime, CrawlerRuntimeConfig

@@ -9,8 +9,8 @@ from concurrent.futures import Future
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Coroutine, Dict, Iterable, Optional, Tuple, TypeVar, Union, cast
 
-from ljp_page.core.base.base_class import Ljp_BaseClass
-from ljp_page.core.base.exceptions import No
+from ljp_page.core.base.Ljp_base_class import Ljp_BaseClass
+from ljp_page.core.base.Ljp_exceptions import No
 
 _T = TypeVar("_T")
 

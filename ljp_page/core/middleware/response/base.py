@@ -3,11 +3,11 @@
 
 from __future__ import annotations
 
-from ....config.request_config.session_config import LjpResponse, RequestContext
-from ..base import AsyncMiddleware, SyncMiddleware
+from ljp_page.modules.request.config.request_config import LjpResponse, RequestContext
+from ..base import Ljp_AsyncMiddleware, Ljp_SyncMiddleware
 
 
-class ResponseMiddlewareBase(SyncMiddleware):
+class ResponseMiddlewareBase(Ljp_SyncMiddleware):
     """同步响应中间件基类。"""
 
     name = "response_base"
@@ -20,7 +20,7 @@ class ResponseMiddlewareBase(SyncMiddleware):
         return response
 
 
-class AsyncResponseMiddlewareBase(AsyncMiddleware):
+class AsyncResponseMiddlewareBase(Ljp_AsyncMiddleware):
     """异步响应中间件基类。"""
 
     name = "response_base_async"

@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 from typing import Any, List, Optional
 
 from ljp_page.applications.pc.base.base_pc import BasePc
-from ljp_page.core.base.base_class import Ljp_Decorator
+from ljp_page.core.base.Ljp_base_class import Ljp_Decorator
 from ljp_page.exceptions import MeetCheckError
 from ljp_page.logger import Logger
 

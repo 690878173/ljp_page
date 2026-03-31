@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from typing import Awaitable, Callable, List
 from urllib.parse import urljoin
 
-from ljp_page.core.base.base_class import Ljp_BaseClass
+from ljp_page.core.base.Ljp_base_class import Ljp_BaseClass
 
 
 @dataclass(slots=True)

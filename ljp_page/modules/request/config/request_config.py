@@ -1,25 +1,14 @@
-"""03-28-15-07-30 请求会话运行时数据模型。"""
-
-from __future__ import annotations
-
-import json
 import re
+import json
 from dataclasses import dataclass, field
-from typing import Any, Mapping
+from typing import Any
 
-from ljp_page.core.base.exceptions import LjpBaseException
+from ljp_page.core.base.Ljp_exceptions import LjpBaseException
+from ljp_page.core.base.tools_func import _safe_value
+from ljp_page.config import ProxyConfig,TimeoutConfig,PoolConfig,LjpConfig,LogConfig,RetryConfig,RequestConfig
 
 _JSON_UNSET = object()
 
-
-@dataclass
-class SessionMetrics:
-    """单个会话实例上的聚合指标。"""
-
-    request_count: int = 0
-    error_count: int = 0
-    retry_count: int = 0
-    total_elapsed: float = 0.0
 
 
 @dataclass
@@ -52,20 +41,6 @@ class RequestContext:
             "json": _safe_value(self.json_data),
         }
 
-
-def _safe_value(value: Any) -> Any:
-    if value is None:
-        return None
-    if isinstance(value, bytes):
-        return f"<bytes:{len(value)}>"
-    if isinstance(value, Mapping):
-        return dict(value)
-    if isinstance(value, (list, tuple)):
-        return list(value)
-    return str(value)
-
-
-@dataclass
 class LjpResponse:
     """统一响应对象，供同步与异步请求共享。"""
 
@@ -144,7 +119,6 @@ class LjpResponse:
                 ) from exc
         return self._json_cache
 
-
 class LjpRequestException(LjpBaseException):
     """带 trace_id 与分类字段的请求异常。"""
 
@@ -185,3 +159,10 @@ class LjpRequestException(LjpBaseException):
         if self.elapsed is not None:
             parts.append(f"elapsed={self.elapsed:.4f}s")
         return " | ".join(parts)
+
+
+
+
+
+
+
