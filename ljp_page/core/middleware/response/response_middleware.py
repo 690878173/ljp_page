@@ -1,35 +1,37 @@
-
-"""响应中间件实现。"""
+# 03-31-20-43-13
+"""Response middleware implementations."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from ljp_page.modules.request.config.request_config import LjpResponse, RequestContext
+from ljp_page.config.request_config.session_config import LjpResponse, RequestContext
 from .base import AsyncResponseMiddlewareBase, ResponseMiddlewareBase
 
 
 class ResponseMiddleware(ResponseMiddlewareBase):
-    """同步响应中间件。"""
+    """Sync response middleware."""
 
     name = "response"
 
-    def after(
+    def after_response(
         self,
         context: RequestContext,
         response: LjpResponse,
+        session: Any,
     ) -> LjpResponse:
         return self.attach_trace_id(context, response)
 
 
 class AsyncResponseMiddleware(AsyncResponseMiddlewareBase):
-    """异步响应中间件。"""
+    """Async response middleware."""
 
     name = "response_async"
 
-    async def after(
+    async def after_response(
         self,
         context: RequestContext,
         response: LjpResponse,
+        session: Any,
     ) -> LjpResponse:
         return self.attach_trace_id(context, response)

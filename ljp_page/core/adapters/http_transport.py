@@ -12,7 +12,7 @@ import aiohttp
 import requests
 from requests.adapters import HTTPAdapter
 
-from ...config.request_config import RequestConfig
+from ...config import LjpConfig
 from ...config.request_config.session_config import RequestContext
 
 
@@ -62,7 +62,7 @@ class AsyncTransportAdapter(ABC):
 class RequestsTransportAdapter(SyncTransportAdapter):
     """requests 适配器，内部维护线程本地 Session。"""
 
-    def __init__(self, config: RequestConfig) -> None:
+    def __init__(self, config: LjpConfig) -> None:
         self.config = config
         self._thread_local = threading.local()
         self._native_sessions: list[requests.Session] = []
@@ -77,10 +77,10 @@ class RequestsTransportAdapter(SyncTransportAdapter):
         )
         session.mount("http://", adapter)
         session.mount("https://", adapter)
-        session.verify = self.config.verify_ssl
-        session.trust_env = self.config.trust_env
-        session.headers.update(self.config.headers)
-        session.cookies.update(self.config.cookies)
+        session.verify = self.config.request.verify_ssl
+        session.trust_env = self.config.request.trust_env
+        session.headers.update(self.config.request.headers)
+        session.cookies.update(self.config.request.cookies)
         proxies = self.config.proxy.as_requests()
         if proxies:
             session.proxies.update(proxies)
@@ -147,7 +147,7 @@ class RequestsTransportAdapter(SyncTransportAdapter):
 class AiohttpTransportAdapter(AsyncTransportAdapter):
     """aiohttp 适配器，内部维护可复用 ClientSession。"""
 
-    def __init__(self, config: RequestConfig) -> None:
+    def __init__(self, config: LjpConfig) -> None:
         self.config = config
         self._session: aiohttp.ClientSession | None = None
         self._session_lock: asyncio.Lock | None = None
@@ -166,16 +166,16 @@ class AiohttpTransportAdapter(AsyncTransportAdapter):
             connector = aiohttp.TCPConnector(
                 limit=self.config.pool.max_connections,
                 limit_per_host=self.config.pool.max_connections_per_host,
-                ssl=self.config.verify_ssl,
+                ssl=self.config.request.verify_ssl,
             )
             jar = aiohttp.CookieJar(unsafe=True)
-            jar.update_cookies(self.config.cookies)
+            jar.update_cookies(self.config.request.cookies)
             self._session = aiohttp.ClientSession(
-                headers=self.config.headers,
+                headers=self.config.request.headers,
                 cookie_jar=jar,
                 connector=connector,
                 timeout=self.config.timeout.aiohttp_timeout,
-                trust_env=self.config.trust_env,
+                trust_env=self.config.request.trust_env,
             )
             return self._session
 

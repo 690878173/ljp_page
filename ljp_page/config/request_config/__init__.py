@@ -1,14 +1,15 @@
-"""03-28-15-07-30 请求配置系统导出。"""
+﻿# 03-31-21-24-00
+"""请求配置系统导出。"""
 
 from .request_config import (
     DEFAULT_LEVEL_ALIASES,
     DEFAULT_LEVEL_NAMES,
     DEFAULT_USER_AGENT,
+    LjpConfig,
     LogConfig,
     MiddlewareConfig,
     PoolConfig,
     ProxyConfig,
-    RequestConfig,
     RequestConfigManager,
     RetryConfig,
     TimeoutConfig,
@@ -23,11 +24,11 @@ __all__ = [
     "DEFAULT_LEVEL_ALIASES",
     "DEFAULT_LEVEL_NAMES",
     "DEFAULT_USER_AGENT",
+    "LjpConfig",
     "LogConfig",
     "MiddlewareConfig",
     "PoolConfig",
     "ProxyConfig",
-    "RequestConfig",
     "RequestConfigManager",
     "RetryConfig",
     "TimeoutConfig",

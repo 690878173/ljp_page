@@ -1,5 +1,6 @@
-"""Public PC application exports."""
+﻿"""Public PC application exports."""
 
-from .applications.pc import Pc, Xs, YhdmSpider, Ys
+from __future__ import annotations
 
-__all__ = ["Pc", "Xs", "Ys", "YhdmSpider"]
+from .applications.pc import *
+from .applications.pc import __all__ as __all__

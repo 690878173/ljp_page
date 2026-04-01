@@ -1,10 +1,10 @@
-"""03-28-16-00-00 请求模块基类。"""
+﻿"""03-28-16-00-00 请求模块基类。"""
 
 from __future__ import annotations
 
 from typing import Any
 
-from ...config.request_config import RequestConfig
+from ...config import LjpConfig
 from ...core.base import AsyncModuleBase, ModuleBase, SyncModuleBase
 
 
@@ -13,7 +13,7 @@ class RequestModuleBase(ModuleBase):
 
     module_name = "request"
 
-    def __init__(self, config: RequestConfig, logger: Any = None) -> None:
+    def __init__(self, config: LjpConfig, logger: Any = None) -> None:
         super().__init__(logger=logger)
         self.config = config
 

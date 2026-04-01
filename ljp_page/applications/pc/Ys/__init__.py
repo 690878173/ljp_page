@@ -1,39 +1,4 @@
-"""Ys 子模块导出。"""
+﻿"""Ys module exports."""
 
-from .ys import (
-    BaseVideoManager,
-    BaseVideoMerger,
-    EpisodePaths,
-    FfmpegConfig,
-    FfmpegVideoMerger,
-    M3u8Parser,
-    M3u8Playlist,
-    PageParseResult,
-    VideoEpisode,
-    VideoInfo,
-    VideoManager,
-    VideoSpiderBase,
-    VideoStorage,
-    YhdmSpider,
-    Ys,
-    YsConfig,
-)
-
-__all__ = [
-    "BaseVideoManager",
-    "BaseVideoMerger",
-    "EpisodePaths",
-    "FfmpegConfig",
-    "FfmpegVideoMerger",
-    "M3u8Parser",
-    "M3u8Playlist",
-    "PageParseResult",
-    "VideoEpisode",
-    "VideoInfo",
-    "VideoManager",
-    "VideoSpiderBase",
-    "VideoStorage",
-    "YhdmSpider",
-    "Ys",
-    "YsConfig",
-]
+from .ys import *  # noqa: F401,F403
+from .ys import __all__ as __all__

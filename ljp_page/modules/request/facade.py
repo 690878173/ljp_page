@@ -1,82 +1,47 @@
-"""03-28-15-07-30 Requests 门面：基于新版中间件请求引擎。"""
+﻿"""03-31-21-24-00 Requests 门面：仅支持 LjpConfig 新用法。"""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from typing import Any
 
 import aiohttp
 import requests
 
-from ...config.request_config import get_request_config
+from ...config import LjpConfig
+from ...config.request_config import get_request_config, merge_request_config
 from .session import AsyncSession, LjpRequestException, LjpResponse, SyncSession, create_session
-
-
-@dataclass
-class RequestsConfig:
-    """门面配置。"""
-
-    proxy_list: list[str] | None = None
-    max_retries: int = 3
-    timeout: float = 10.0
-    cookies: dict[str, str] = field(default_factory=dict)
-    headers: dict[str, str] = field(default_factory=dict)
-    delay: float = 0.0
-    verify_ssl: bool = True
-    allow_redirects: bool = True
-    base_url: str = ""
-    log_level: int = 5
-    enabled_levels: list[int] = field(default_factory=lambda: list(range(1, 20)))
 
 
 class Requests:
     """对外统一请求入口。"""
 
-    Config = RequestsConfig
-
-    def __init__(self, config: RequestsConfig | None = None, logger: Any = None):
+    def __init__(self, config: LjpConfig | None = None, logger: Any = None):
         self.logger = logger
-        self.config = config or self.Config()
+        if config is None:
+            self.config = get_request_config()
+        elif isinstance(config, LjpConfig):
+            self.config = config
+        else:
+            raise TypeError("config must be LjpConfig")
         self._sync_wrapper: SyncSession | None = None
         self._async_wrapper: AsyncSession | None = None
 
-    def _compat_options(self) -> dict[str, Any]:
-        proxy = None
-        if self.config.proxy_list:
-            first_proxy = self.config.proxy_list[0]
-            proxy = {"http": first_proxy, "https": first_proxy}
-        return {
-            "base_url": self.config.base_url,
-            "verify_ssl": self.config.verify_ssl,
-            "allow_redirects": self.config.allow_redirects,
-            "headers": self.config.headers,
-            "cookies": self.config.cookies,
-            "request_delay": self.config.delay,
-            "retry": {"total": self.config.max_retries},
-            "timeout": {"connect": self.config.timeout, "read": self.config.timeout},
-            "proxy": proxy,
-            "log": {
-                "default_level": self.config.log_level,
-                "enabled_levels": self.config.enabled_levels,
-            },
-        }
-
     def _build_sync_wrapper(self, **overrides: Any) -> SyncSession:
+        merged = merge_request_config(self.config, **overrides) if overrides else self.config
         wrapper = create_session(
             "sync",
-            config=get_request_config(**self._compat_options()),
+            config=merged,
             logger=self.logger,
-            **overrides,
         )
         self._sync_wrapper = wrapper
         return wrapper
 
     def _build_async_wrapper(self, **overrides: Any) -> AsyncSession:
+        merged = merge_request_config(self.config, **overrides) if overrides else self.config
         wrapper = create_session(
             "async",
-            config=get_request_config(**self._compat_options()),
+            config=merged,
             logger=self.logger,
-            **overrides,
         )
         self._async_wrapper = wrapper
         return wrapper
@@ -98,26 +63,60 @@ class Requests:
         return response.text
 
     @staticmethod
-    def _split_sync_args(*args: Any, **kwargs: Any) -> tuple[Any, str]:
+    def _build_overrides(
+        *,
+        cookies: dict[str, str] | None = None,
+        headers: dict[str, str] | None = None,
+        verify_ssl: bool | None = None,
+        max_connections: int | None = None,
+        max_connections_per_host: int | None = None,
+    ) -> dict[str, Any]:
+        overrides: dict[str, Any] = {}
+        request_override: dict[str, Any] = {}
+
+        if cookies is not None:
+            request_override["cookies"] = cookies
+        if headers is not None:
+            request_override["headers"] = headers
+        if verify_ssl is not None:
+            request_override["verify_ssl"] = verify_ssl
+
+        if request_override:
+            overrides["request"] = request_override
+
+        if max_connections is not None and max_connections_per_host is not None:
+            overrides["pool"] = {
+                "max_connections": max_connections,
+                "max_connections_per_host": max_connections_per_host,
+            }
+
+        return overrides
+
+    @staticmethod
+    def _split_sync_args(args: tuple[Any, ...], kwargs: dict[str, Any]) -> tuple[Any, str]:
         session = kwargs.pop("session", None)
         if args and isinstance(args[0], (requests.Session, SyncSession)):
             if len(args) < 2:
                 raise ValueError("缺少 URL 参数")
+            kwargs.pop("url", None)
             return args[0], args[1]
         if args:
+            kwargs.pop("url", None)
             return session, args[0]
         if "url" not in kwargs:
             raise ValueError("缺少 URL 参数")
         return session, kwargs.pop("url")
 
     @staticmethod
-    def _split_async_args(*args: Any, **kwargs: Any) -> tuple[Any, str]:
+    def _split_async_args(args: tuple[Any, ...], kwargs: dict[str, Any]) -> tuple[Any, str]:
         session = kwargs.pop("session", None)
         if args and isinstance(args[0], (aiohttp.ClientSession, AsyncSession)):
             if len(args) < 2:
                 raise ValueError("缺少 URL 参数")
+            kwargs.pop("url", None)
             return args[0], args[1]
         if args:
+            kwargs.pop("url", None)
             return session, args[0]
         if "url" not in kwargs:
             raise ValueError("缺少 URL 参数")
@@ -129,7 +128,8 @@ class Requests:
         headers: dict[str, str] | None = None,
         wrapper: bool = False,
     ) -> requests.Session | SyncSession:
-        runtime = self._build_sync_wrapper(cookies=cookies or {}, headers=headers or {})
+        overrides = self._build_overrides(cookies=cookies, headers=headers)
+        runtime = self._build_sync_wrapper(**overrides)
         return runtime if wrapper else runtime.get_native_session()
 
     async def async_create_session(
@@ -138,18 +138,21 @@ class Requests:
         limit_per_host: int = 100,
         cookies: dict[str, str] | None = None,
         headers: dict[str, str] | None = None,
-        verify_ssl: bool = True,
+        verify_ssl: bool | None = None,
         wrapper: bool = False,
     ) -> aiohttp.ClientSession | AsyncSession:
-        runtime = self._build_async_wrapper(
-            cookies=cookies or {},
-            headers=headers or {},
+        max_connections = limit if limit > 0 else limit_per_host
+        pool_max = max_connections if (max_connections > 0 or limit_per_host > 0) else None
+        pool_per_host = limit_per_host if (max_connections > 0 or limit_per_host > 0) else None
+        overrides = self._build_overrides(
+            cookies=cookies,
+            headers=headers,
             verify_ssl=verify_ssl,
-            pool={
-                "max_connections": limit or limit_per_host,
-                "max_connections_per_host": limit_per_host,
-            },
+            max_connections=pool_max,
+            max_connections_per_host=pool_per_host,
         )
+
+        runtime = self._build_async_wrapper(**overrides)
         await runtime.open()
         return runtime if wrapper else await runtime.get_native_session()
 
@@ -170,7 +173,7 @@ class Requests:
         return await runtime.request(method, url, **kwargs)
 
     def get(self, *args: Any, **kwargs: Any) -> Any:
-        session, url = self._split_sync_args(*args, **kwargs)
+        session, url = self._split_sync_args(args, kwargs)
         return_type = self._normalize_return_type(
             kwargs.pop("return_type", None),
             kwargs.pop("read_content", False),
@@ -180,7 +183,7 @@ class Requests:
         return self._unwrap_response(response, return_type)
 
     def post(self, *args: Any, **kwargs: Any) -> Any:
-        session, url = self._split_sync_args(*args, **kwargs)
+        session, url = self._split_sync_args(args, kwargs)
         return_type = self._normalize_return_type(
             kwargs.pop("return_type", None),
             kwargs.pop("read_content", False),
@@ -190,7 +193,7 @@ class Requests:
         return self._unwrap_response(response, return_type)
 
     async def async_get(self, *args: Any, **kwargs: Any) -> Any:
-        session, url = self._split_async_args(*args, **kwargs)
+        session, url = self._split_async_args(args, kwargs)
         return_type = self._normalize_return_type(
             kwargs.pop("return_type", None),
             kwargs.pop("read_content", False),
@@ -200,7 +203,7 @@ class Requests:
         return self._unwrap_response(response, return_type)
 
     async def async_post(self, *args: Any, **kwargs: Any) -> Any:
-        session, url = self._split_async_args(*args, **kwargs)
+        session, url = self._split_async_args(args, kwargs)
         return_type = self._normalize_return_type(
             kwargs.pop("return_type", None),
             kwargs.pop("read_content", False),
@@ -243,21 +246,11 @@ class Requests:
         raise TypeError(f"不支持的 session 类型: {type(session).__name__}")
 
 
-TBSession = SyncSession
-YBSession = AsyncSession
-TBRequests = SyncSession
-YBRequests = AsyncSession
-
-
 __all__ = [
     "AsyncSession",
     "LjpRequestException",
     "LjpResponse",
     "Requests",
     "SyncSession",
-    "TBRequests",
-    "TBSession",
-    "YBRequests",
-    "YBSession",
     "create_session",
 ]

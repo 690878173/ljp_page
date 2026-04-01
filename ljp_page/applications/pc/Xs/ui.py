@@ -35,7 +35,7 @@ class XsUI(Xs):
 
             self.cookies_entry = tk.Text(self.window, width=70, height=10, font=("Consolas", 10))
             self.cookies_entry.pack(pady=5)
-            self.cookies_entry.insert("1.0", f"{self.spider.config.cookies}")
+            self.cookies_entry.insert("1.0", f"{self.spider.config.request_cookies}")
 
             button_frame = tk.Frame(self.window)
             button_frame.pack(pady=20)

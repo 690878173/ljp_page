@@ -1,22 +1,22 @@
-# 03-28-16-28-21
-"""重试中间件基类。"""
+# 03-31-20-43-13
+"""Retry middleware base classes."""
 
 from __future__ import annotations
 
 import asyncio
 import time
 
-from ljp_page.modules.request.config.request_config import (
+from ljp_page.config.Ljp_config import LjpConfig
+from ljp_page.config.request_config.session_config import (
     LjpRequestException,
     LjpResponse,
     RequestContext,
 )
-from ljp_page.config.Ljp_config import LjpConfig
 from ..base import AsyncMiddleware, Ljp_MiddlewareBase, SyncMiddleware
 
 
 class RetryMiddlewareBase(Ljp_MiddlewareBase):
-    """重试中间件通用基类。"""
+    """Shared retry policy base class."""
 
     name = "retry_base"
 
@@ -24,16 +24,36 @@ class RetryMiddlewareBase(Ljp_MiddlewareBase):
         self.config = config
 
     def calculate_delay(self, attempt: int) -> float:
-        """根据指数退避策略计算等待时长。"""
-
         return min(
             self.config.retry.max_backoff,
             self.config.retry.backoff_factor * (2**attempt),
         )
 
+    def should_retry_exception(
+        self,
+        context: RequestContext,
+        error: LjpRequestException,
+    ) -> bool:
+        category = str(getattr(error, "category", "unknown")).lower()
+        if category in {item.lower() for item in self.config.retry.ignore_exceptions}:
+            return False
+        targets = {item.lower() for item in self.config.retry.retry_on_exceptions}
+        return not targets or category in targets
+
+    def should_retry_response(
+        self,
+        context: RequestContext,
+        response: LjpResponse,
+    ) -> bool:
+        retry_on_status = self.config.retry.extra.get(
+            "retry_on_status",
+            [429, 500, 502, 503, 504],
+        )
+        return response.status_code in set(retry_on_status)
+
 
 class SyncRetryMiddlewareBase(RetryMiddlewareBase, SyncMiddleware):
-    """同步重试中间件基类。"""
+    """Base class for sync retry middleware."""
 
     name = "retry_base_sync"
 
@@ -44,7 +64,7 @@ class SyncRetryMiddlewareBase(RetryMiddlewareBase, SyncMiddleware):
 
 
 class AsyncRetryMiddlewareBase(RetryMiddlewareBase, AsyncMiddleware):
-    """异步重试中间件基类。"""
+    """Base class for async retry middleware."""
 
     name = "retry_base_async"
 
@@ -52,5 +72,3 @@ class AsyncRetryMiddlewareBase(RetryMiddlewareBase, AsyncMiddleware):
         delay = self.calculate_delay(attempt)
         if delay > 0:
             await asyncio.sleep(delay)
-
-

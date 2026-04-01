@@ -104,33 +104,3 @@ class Logger(Ljp_BaseClass):
             self.log_file_path.parent.mkdir(parents=True, exist_ok=True)
             with self.log_file_path.open("a", encoding="utf-8") as file_handle:
                 file_handle.write(f"{line}\n")
-
-    def log(self, level: int | str, message: str, **_: object) -> None:
-        """记录日志，level 可传数字或别名字符串。"""
-
-        level_code = self._normalize_level(level, fallback=self.default_level)
-        with self._lock:
-            if not self._should_emit(level_code):
-                return
-            self._emit(self._format_line(level_code, str(message)))
-
-    def debug(self, message: str, **kwargs: object) -> None:
-        self.log(1, message, **kwargs)
-
-    def trace(self, message: str, **kwargs: object) -> None:
-        self.log(2, message, **kwargs)
-
-    def info(self, message: str, **kwargs: object) -> None:
-        self.log(5, message, **kwargs)
-
-    def warrior(self, message: str, **kwargs: object) -> None:
-        self.log(10, message, **kwargs)
-
-    def warning(self, message: str, **kwargs: object) -> None:
-        self.log(10, message, **kwargs)
-
-    def error(self, message: str, **kwargs: object) -> None:
-        self.log(15, message, **kwargs)
-
-    def critical(self, message: str, **kwargs: object) -> None:
-        self.log(19, message, **kwargs)

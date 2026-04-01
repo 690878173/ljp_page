@@ -8,7 +8,6 @@ from abc import ABC, abstractmethod
 from typing import Any, List, Optional
 
 from ljp_page.applications.pc.base.base_pc import BasePc
-from ljp_page.core.base.Ljp_base_class import Ljp_Decorator
 from ljp_page.exceptions import MeetCheckError
 from ljp_page.logger import Logger
 
@@ -41,10 +40,16 @@ class VideoSpiderBase(BasePc, ABC):
         manager_cls = self.get_manager()
         self.video_manager = manager_cls(self, self.config, self.log)
 
-    @Ljp_Decorator.handle_exceptions(MeetCheckError, BasePc.meet_fanpa)
+    async def _request_impl(self, session: Any, url: str, *args: Any, **kwargs: Any) -> Any:
+        kwargs.setdefault("return_type", "text")
+        return await self.req.async_get(session=session, url=url, *args, **kwargs)
+
     async def get(self, session: Any, url: str, *args: Any, **kwargs: Any) -> Any:
         self.debug(f"request url: {url}", self.get.__name__)
-        return await self.req.async_get(session=session, url=url, *args, **kwargs)
+        try:
+            return await self._request_impl(session, url, *args, **kwargs)
+        except MeetCheckError as exc:
+            return await self.meet_fanpa(exc, VideoSpiderBase._request_impl, session, url, *args, **kwargs)
 
     async def _fetch_video_info(self, video_id: Any) -> Optional[VideoInfo]:
         info_url = self.config.info_url.format(video_id)

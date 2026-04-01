@@ -1,5 +1,4 @@
-"""03-28-15-07-30 新版请求引擎：适配器模式 + 中间件管线。"""
-
+﻿
 from __future__ import annotations
 
 import asyncio
@@ -14,7 +13,7 @@ import aiohttp
 import requests
 
 from ...config.request_config import (
-    RequestConfig,
+    LjpConfig,
     TimeoutConfig,
     get_request_config,
     merge_request_config,
@@ -34,12 +33,10 @@ from ...core.adapters import (
     SyncTransportAdapter,
 )
 from ...core.middleware import (
-    AsyncLoggingMiddleware,
     AsyncMiddleware,
     AsyncRequestMiddleware,
     AsyncResponseMiddleware,
     AsyncRetryMiddleware,
-    LoggingMiddleware,
     RequestMiddleware,
     ResponseMiddleware,
     SyncMiddleware,
@@ -49,7 +46,6 @@ from .base import RequestModuleBase
 
 
 class SyncVerbMixin:
-    """同步 HTTP 动词快捷方法。"""
 
     def get(self, url: str, **kwargs: Any) -> LjpResponse:
         return self.request("GET", url, **kwargs)
@@ -65,7 +61,6 @@ class SyncVerbMixin:
 
 
 class AsyncVerbMixin:
-    """异步 HTTP 动词快捷方法。"""
 
     async def get(self, url: str, **kwargs: Any) -> LjpResponse:
         return await self.request("GET", url, **kwargs)
@@ -81,13 +76,12 @@ class AsyncVerbMixin:
 
 
 class SessionBase(RequestModuleBase):
-    """同步/异步会话公共能力。"""
 
-    def __init__(self, config: RequestConfig, logger: Any = None) -> None:
+    def __init__(self, config: LjpConfig, logger: Any = None) -> None:
         super().__init__(config=deepcopy(config), logger=logger)
         self.metrics = SessionMetrics()
         self._state_lock = threading.RLock()
-        self._cookie_store = deepcopy(self.config.cookies)
+        self._cookie_store = deepcopy(self.config.request.cookies)
         self.logger = logger or self._build_default_logger()
         if isinstance(self.logger, Logger):
             self.logger.set_enabled_levels(self.config.log.enabled_levels)
@@ -107,7 +101,7 @@ class SessionBase(RequestModuleBase):
     @property
     def headers(self) -> dict[str, str]:
         with self._state_lock:
-            return deepcopy(self.config.headers)
+            return deepcopy(self.config.request.headers)
 
     @property
     def cookies(self) -> dict[str, str]:
@@ -116,7 +110,7 @@ class SessionBase(RequestModuleBase):
 
     def update_headers(self, headers: Mapping[str, str]) -> None:
         with self._state_lock:
-            self.config.headers.update(dict(headers))
+            self.config.request.headers.update(dict(headers))
         self._sync_headers_to_native()
 
     def update_cookies(self, cookies: Mapping[str, str]) -> None:
@@ -153,14 +147,14 @@ class SessionBase(RequestModuleBase):
             return float(timeout[0]), float(timeout[1])
         if isinstance(timeout, Mapping):
             return merge_request_config(self.config, timeout=timeout).timeout.requests_timeout
-        raise TypeError(f"不支持的 timeout 类型: {type(timeout).__name__}")
+        raise TypeError(f"涓嶆敮鎸佺殑 timeout 绫诲瀷: {type(timeout).__name__}")
 
     def _resolve_url(self, url: str) -> str:
         if url.startswith(("http://", "https://")):
             return url
-        if not self.config.base_url:
-            raise ValueError("相对路径请求需要配置 base_url")
-        return urljoin(f"{self.config.base_url.rstrip('/')}/", url.lstrip("/"))
+        if not self.config.request.base_url:
+            raise ValueError("鐩稿璺緞璇锋眰闇€瑕侀厤缃?base_url")
+        return urljoin(f"{self.config.request.base_url.rstrip('/')}/", url.lstrip("/"))
 
     def _resolve_proxy(
         self,
@@ -194,10 +188,10 @@ class SessionBase(RequestModuleBase):
         proxy = request_kwargs.pop("proxy", None)
         proxies = request_kwargs.pop("proxies", None)
         allow_redirects = bool(
-            request_kwargs.pop("allow_redirects", self.config.allow_redirects)
+            request_kwargs.pop("allow_redirects", self.config.request.allow_redirects)
         )
-        stream = bool(request_kwargs.pop("stream", self.config.stream))
-        verify_ssl = bool(request_kwargs.pop("verify_ssl", self.config.verify_ssl))
+        stream = bool(request_kwargs.pop("stream", self.config.request.stream))
+        verify_ssl = bool(request_kwargs.pop("verify_ssl", self.config.request.verify_ssl))
         trace_id = str(request_kwargs.pop("trace_id", uuid.uuid4().hex))
 
         params = request_kwargs.pop("params", None)
@@ -260,11 +254,10 @@ class SessionBase(RequestModuleBase):
 
 
 class SyncSession(SessionBase, SyncVerbMixin):
-    """同步会话：requests 适配器 + 同步中间件。"""
 
     def __init__(
         self,
-        config: RequestConfig,
+        config: LjpConfig,
         *,
         logger: Any = None,
         adapter: SyncTransportAdapter | None = None,
@@ -287,14 +280,11 @@ class SyncSession(SessionBase, SyncVerbMixin):
         chain: list[SyncMiddleware] = []
         if self.config.middleware.enable_request_middleware:
             chain.append(RequestMiddleware())
-        if self.config.middleware.enable_logging_middleware:
-            chain.append(LoggingMiddleware(self.config, self.logger))
         if self.config.middleware.enable_response_middleware:
             chain.append(ResponseMiddleware())
         return chain
 
     def use(self, middleware: SyncMiddleware) -> "SyncSession":
-        """按顺序挂载同步中间件。"""
 
         self.middlewares.append(middleware)
         return self
@@ -302,7 +292,7 @@ class SyncSession(SessionBase, SyncVerbMixin):
     def get_native_session(self) -> requests.Session:
         if isinstance(self.adapter, RequestsTransportAdapter):
             return self.adapter.get_native_session()
-        raise TypeError("当前适配器不支持返回 requests.Session")
+        raise TypeError("褰撳墠閫傞厤鍣ㄤ笉鏀寔杩斿洖 requests.Session")
 
     def _sync_headers_to_native(self) -> None:
         self.adapter.sync_defaults(self.headers, self.cookies)
@@ -330,7 +320,7 @@ class SyncSession(SessionBase, SyncVerbMixin):
             category = "unknown"
         status_code = getattr(getattr(exc, "response", None), "status_code", None)
         return LjpRequestException(
-            "同步请求失败",
+            "鍚屾璇锋眰澶辫触",
             trace_id=context.trace_id,
             method=context.method,
             url=context.url,
@@ -357,7 +347,6 @@ class SyncSession(SessionBase, SyncVerbMixin):
         attempt: int,
         total_start: float,
     ) -> LjpResponse:
-        """真正触发一次底层发送，并把异常统一映射为请求异常。"""
 
         try:
             adapter_response = self.adapter.send(context)
@@ -382,7 +371,6 @@ class SyncSession(SessionBase, SyncVerbMixin):
         sender: Callable[[RequestContext], LjpResponse],
         middlewares: Sequence[SyncMiddleware],
     ) -> Callable[[RequestContext], LjpResponse]:
-        """构建同步中间件责任链。"""
 
         chain = sender
         for middleware in reversed(middlewares):
@@ -409,7 +397,7 @@ class SyncSession(SessionBase, SyncVerbMixin):
         **kwargs: Any,
     ) -> LjpResponse:
         total_start = time.perf_counter()
-        delay = max(0.0, self.config.request_delay)
+        delay = max(0.0, self.config.request.request_delay)
         if delay > 0:
             time.sleep(delay)
         request_middlewares = kwargs.pop("middlewares", None)
@@ -483,11 +471,10 @@ class SyncSession(SessionBase, SyncVerbMixin):
 
 
 class AsyncSession(SessionBase, AsyncVerbMixin):
-    """异步会话：aiohttp 适配器 + 异步中间件。"""
 
     def __init__(
         self,
-        config: RequestConfig,
+        config: LjpConfig,
         *,
         logger: Any = None,
         adapter: AsyncTransportAdapter | None = None,
@@ -510,14 +497,11 @@ class AsyncSession(SessionBase, AsyncVerbMixin):
         chain: list[AsyncMiddleware] = []
         if self.config.middleware.enable_request_middleware:
             chain.append(AsyncRequestMiddleware())
-        if self.config.middleware.enable_logging_middleware:
-            chain.append(AsyncLoggingMiddleware(self.config, self.logger))
         if self.config.middleware.enable_response_middleware:
             chain.append(AsyncResponseMiddleware())
         return chain
 
     def use(self, middleware: AsyncMiddleware) -> "AsyncSession":
-        """按顺序挂载异步中间件。"""
 
         self.middlewares.append(middleware)
         return self
@@ -525,7 +509,7 @@ class AsyncSession(SessionBase, AsyncVerbMixin):
     async def get_native_session(self) -> aiohttp.ClientSession:
         if isinstance(self.adapter, AiohttpTransportAdapter):
             return await self.adapter.ensure_session()
-        raise TypeError("当前适配器不支持返回 aiohttp.ClientSession")
+        raise TypeError("褰撳墠閫傞厤鍣ㄤ笉鏀寔杩斿洖 aiohttp.ClientSession")
 
     def _sync_headers_to_native(self) -> None:
         self.adapter.sync_defaults(self.headers, self.cookies)
@@ -553,7 +537,7 @@ class AsyncSession(SessionBase, AsyncVerbMixin):
             category = "unknown"
         status_code = getattr(exc, "status", None)
         return LjpRequestException(
-            "异步请求失败",
+            "寮傛璇锋眰澶辫触",
             trace_id=context.trace_id,
             method=context.method,
             url=context.url,
@@ -580,7 +564,6 @@ class AsyncSession(SessionBase, AsyncVerbMixin):
         attempt: int,
         total_start: float,
     ) -> LjpResponse:
-        """真正触发一次底层发送，并把异常统一映射为请求异常。"""
 
         try:
             adapter_response = await self.adapter.send(context)
@@ -605,7 +588,6 @@ class AsyncSession(SessionBase, AsyncVerbMixin):
         sender: Callable[[RequestContext], Awaitable[LjpResponse]],
         middlewares: Sequence[AsyncMiddleware],
     ) -> Callable[[RequestContext], Awaitable[LjpResponse]]:
-        """构建异步中间件责任链。"""
 
         chain = sender
         for middleware in reversed(middlewares):
@@ -632,7 +614,7 @@ class AsyncSession(SessionBase, AsyncVerbMixin):
         **kwargs: Any,
     ) -> LjpResponse:
         total_start = time.perf_counter()
-        delay = max(0.0, self.config.request_delay)
+        delay = max(0.0, self.config.request.request_delay)
         if delay > 0:
             await asyncio.sleep(delay)
         request_middlewares = kwargs.pop("middlewares", None)
@@ -721,7 +703,6 @@ def create_session(
     mode: Literal["sync", "async"] = "sync",
     **options: Any,
 ) -> SyncSession | AsyncSession:
-    """创建请求会话。"""
 
     logger = options.pop("logger", None)
     middlewares = options.pop("middlewares", None)
@@ -743,7 +724,7 @@ def create_session(
             adapter=adapter,
             middlewares=middlewares,
         )
-    raise ValueError("mode 必须是 'sync' 或 'async'")
+    raise ValueError("mode 蹇呴』鏄?'sync' 鎴?'async'")
 
 
 __all__ = [
@@ -755,3 +736,5 @@ __all__ = [
     "SyncSession",
     "create_session",
 ]
+
+

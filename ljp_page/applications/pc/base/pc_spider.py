@@ -9,7 +9,6 @@ from typing import Any, List, Tuple
 
 from ....exceptions import MeetCheckError, No, Notfound
 from ....logger import Logger
-from ljp_page.core.base.Ljp_base_class import Ljp_Decorator
 
 from .manager_base import BaseManager
 from .runtime_base import BasePc
@@ -37,9 +36,9 @@ class Pc(BasePc):
         if self.manager is None:
             raise NotImplementedError("get_manager must return manager class")
 
-    @Ljp_Decorator.handle_exceptions(MeetCheckError, BasePc.meet_fanpa)
     async def get(self, session: Any, url: str, *args: Any, **kwargs: Any) -> Any:
         self.debug(f"request url: {url}", self.get.__name__)
+        kwargs.setdefault("return_type", "text")
         return await self.req.async_get(session=session, url=url, *args, **kwargs)
 
     def parse_p1(self, res_html: str, url: str) -> BasePc.P1Result:
@@ -50,6 +49,21 @@ class Pc(BasePc):
 
     def parse_p3(self, res_html: str, url: str) -> BasePc.P3ParseResult:
         raise NotImplementedError("parse_p3 is required")
+
+    @staticmethod
+    def _normalize_p3s(raw_p3s: list[Any]) -> list[tuple[str, str]]:
+        normalized: list[tuple[str, str]] = []
+        for index, item in enumerate(raw_p3s, start=1):
+            if isinstance(item, tuple) and len(item) == 2:
+                chapter_title, chapter_url = item
+            elif isinstance(item, list) and len(item) == 2:
+                chapter_title, chapter_url = item[0], item[1]
+            else:
+                raise TypeError(
+                    f"parse_p2.p3s[{index}] must be (title, url), got {item!r}"
+                )
+            normalized.append((str(chapter_title or ""), str(chapter_url)))
+        return normalized
 
     async def _process_page(self, page_id: Any) -> List[Any]:
         if not self.config.p1_url:
@@ -99,7 +113,7 @@ class Pc(BasePc):
                     description = parsed.description
 
                 if parsed.p3s:
-                    all_p3s.extend(parsed.p3s)
+                    all_p3s.extend(self._normalize_p3s(parsed.p3s))
 
                 if not parsed.next_url or parsed.next_url == current_url:
                     break

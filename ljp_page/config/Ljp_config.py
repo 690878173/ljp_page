@@ -1,53 +1,27 @@
-from ljp_page.config import RetryConfig,PoolConfig,ProxyConfig,TimeoutConfig,LogConfig,RequestConfig
+﻿# 03-31-21-24-00
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any
+
+from .log_config import LogConfig
+from .middlewareconfig import MiddlewareConfig
+from .poolconfig import PoolConfig
+from .proxyconfig import ProxyConfig
+from .requestconfig import RequestConfig
+from .retryconfig import RetryConfig
+from .timeoutconfig import TimeoutConfig
 
 
-_JSON_UNSET = object()
-
+@dataclass
 class LjpConfig:
-    _request = _JSON_UNSET
-    _timeout = _JSON_UNSET
-    _retry = _JSON_UNSET
-    _pool = _JSON_UNSET
-    _log = _JSON_UNSET
+    """主配置：统一收拢请求链路的全部子配置。"""
+
+    request: RequestConfig = field(default_factory=RequestConfig)
+    timeout: TimeoutConfig = field(default_factory=TimeoutConfig)
+    retry: RetryConfig = field(default_factory=RetryConfig)
+    pool: PoolConfig = field(default_factory=PoolConfig)
+    proxy: ProxyConfig = field(default_factory=ProxyConfig)
+    log: LogConfig = field(default_factory=LogConfig)
+    middleware: MiddlewareConfig = field(default_factory=MiddlewareConfig)
     extra: dict[str, Any] = field(default_factory=dict)
-
-    @property
-    def request(self):
-        if self._request is _JSON_UNSET:
-            self._request = RequestConfig()
-        return self._request
-
-    @property
-    def timeout(self):
-        if self._timeout is _JSON_UNSET:
-            pass
-
-        return self._timeout
-
-    @property
-    def retry(self):
-        if self._retry is _JSON_UNSET:
-            self._retry = RetryConfig()
-        return self._retry
-
-
-    @property
-    def pool(self):
-        if self._pool is _JSON_UNSET:
-            self._pool = PoolConfig()
-        return self._pool
-
-    @property
-    def log(self):
-        if self._log is _JSON_UNSET:
-            self._log = LogConfig()
-        return self._log
-
-
-
-
-
-
-
-
-

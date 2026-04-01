@@ -1,14 +1,17 @@
-# 03-28-23-45-00
-"""PC 爬虫基础数据模型。"""
+﻿# 03-31-22-05-00
+"""PC crawler data models and runtime config."""
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
+
+from ljp_page.config import LjpConfig
 
 
 class Mode:
-    """运行模式常量。"""
+    """Runtime mode constants."""
 
     MODE1 = "mode1"
     MODE2 = "mode2"
@@ -17,12 +20,12 @@ class Mode:
 
 @dataclass
 class PcConfig:
-    """通用爬虫运行配置。"""
+    """通用 PC 爬虫配置。"""
 
     base_url: str
     save_path: str
 
-    # 文本类爬虫会使用 p1/p2，两者在影视爬虫中可为空。
+    # 文本类爬虫使用 p1/p2；影视类爬虫可为空。
     p2_url: Optional[str] = None
     p1_url: Optional[str] = None
 
@@ -37,11 +40,8 @@ class PcConfig:
     end_id: int = 5
     id_ls: Optional[List[Any]] = None
 
-    proxy_list: Optional[List[str]] = None
-    max_retries: int = 3
-    timeout: float = 10.0
-    cookies: Dict[str, str] = field(default_factory=dict)
-    headers: Dict[str, str] = field(default_factory=dict)
+    # 请求配置统一通过 LjpConfig 注入。
+    ljp_config: LjpConfig = field(default_factory=LjpConfig)
 
     mode: str = Mode.MODE1
     worker_startup_delay: float = 1.0
@@ -54,6 +54,36 @@ class PcConfig:
         self._validate_optional_urls()
         self._validate_id_list()
         self._validate_mode_specific_params()
+        # 统一入口：PC 运行时 base_url 与请求配置必须一致，避免双配置分叉。
+        if self.ljp_config.request.base_url and self.ljp_config.request.base_url != self.base_url:
+            raise ValueError(
+                "config error: base_url must match ljp_config.request.base_url"
+            )
+        self.ljp_config.request.base_url = self.base_url
+
+    @property
+    def request_headers(self) -> dict[str, str]:
+        """返回请求默认 headers。"""
+
+        return self.ljp_config.request.headers
+
+    @property
+    def request_cookies(self) -> dict[str, str]:
+        """返回请求默认 cookies。"""
+
+        return self.ljp_config.request.cookies
+
+    def update_request_cookies(self, cookies: dict[str, str]) -> None:
+        """合并更新请求 cookies。"""
+
+        self.ljp_config.request.cookies.update(cookies)
+
+    def build_request_config(self) -> LjpConfig:
+        """构建运行时使用的请求配置副本。"""
+
+        config = deepcopy(self.ljp_config)
+        config.request.base_url = self.base_url
+        return config
 
     def _validate_base_params(self) -> None:
         if not self.base_url:

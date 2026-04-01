@@ -1,34 +1,29 @@
-
-"""请求中间件基类。"""
+# 03-31-20-43-13
+"""Request middleware base classes."""
 
 from __future__ import annotations
 
-from ..base import Ljp_SyncMiddleware,Ljp_AsyncMiddleware
-
-from ljp_page.modules.request.config.request_config import RequestContext
+from ljp_page.config.request_config.session_config import RequestContext
+from ..base import Ljp_AsyncMiddleware, Ljp_SyncMiddleware
 
 
 class RequestMiddlewareBase(Ljp_SyncMiddleware):
-    """同步请求中间件基类。"""
+    """Base class for sync request middleware."""
 
     name = "request_base"
 
     @staticmethod
     def prepare_context(context: RequestContext) -> None:
-        """标准化请求方法并注入 trace_id。"""
-
         context.method = context.method.upper()
         context.headers.setdefault("X-Trace-Id", context.trace_id)
 
 
 class AsyncRequestMiddlewareBase(Ljp_AsyncMiddleware):
-    """异步请求中间件基类。"""
+    """Base class for async request middleware."""
 
     name = "request_base_async"
 
     @staticmethod
     def prepare_context(context: RequestContext) -> None:
-        """标准化请求方法并注入 trace_id。"""
-
         context.method = context.method.upper()
         context.headers.setdefault("X-Trace-Id", context.trace_id)

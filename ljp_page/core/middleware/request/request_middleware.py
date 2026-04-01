@@ -1,27 +1,27 @@
-# 03-28-16-28-21
-"""请求中间件实现。"""
+# 03-31-20-43-13
+"""Request middleware implementations."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from ljp_page.modules.request.config.request_config import RequestContext
+from ljp_page.config.request_config.session_config import RequestContext
 from .base import AsyncRequestMiddlewareBase, RequestMiddlewareBase
 
 
 class RequestMiddleware(RequestMiddlewareBase):
-    """同步请求中间件。"""
+    """Sync request middleware."""
 
     name = "request"
 
-    def before_request(self, context: RequestContext) -> None:
+    def before_request(self, context: RequestContext, session: Any) -> None:
         self.prepare_context(context)
 
 
 class AsyncRequestMiddleware(AsyncRequestMiddlewareBase):
-    """异步请求中间件。"""
+    """Async request middleware."""
 
     name = "request_async"
 
-    async def before_request(self, context: RequestContext) -> None:
+    async def before_request(self, context: RequestContext, session: Any) -> None:
         self.prepare_context(context)

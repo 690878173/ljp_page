@@ -1,5 +1,5 @@
-# 03-28-23-50-00
-"""PC 爬虫运行时基类。"""
+﻿# 03-31-22-35-00
+"""PC crawler runtime base class."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from .runtime_executor import CrawlerRuntime, CrawlerRuntimeConfig
 
 
 class BasePc(Ljp_BaseClass):
-    """PC 站点统一运行时基类。"""
+    """Shared runtime base class for PC crawlers."""
 
     Config = PcConfig
     P1Result = P1Result
@@ -62,13 +62,7 @@ class BasePc(Ljp_BaseClass):
         self._stopped = False
 
     def _build_runtime(self) -> None:
-        req_config = Requests.Config(
-            proxy_list=self.config.proxy_list,
-            max_retries=self.config.max_retries,
-            timeout=self.config.timeout,
-            cookies=self.config.cookies,
-            headers=self.config.headers,
-        )
+        req_config = self.config.build_request_config()
         self.req = Requests(req_config, logger=self.log)
         self.runtime = CrawlerRuntime(
             CrawlerRuntimeConfig(
@@ -79,19 +73,8 @@ class BasePc(Ljp_BaseClass):
             logger=self.log,
         )
 
-        # 兼容常用属性命名
-        self.exc = self.runtime.exc
-        self.threadpool = self.runtime.thread_pool
-        self.asy = self.runtime.async_runtime
-
         self.directory = Directory(self.config.save_path, logger=self.log)
         self.file_handle = FileHandle(max_open_files=self.config.max_open_files, logger=self.log)
-        self.Directory = self.directory
-        self.File_handle = self.file_handle
-
-    @staticmethod
-    def name(fun: Any) -> str:
-        return fun.__name__
 
     def _should_exit(self) -> bool:
         if self.stop_flag:
@@ -134,13 +117,14 @@ class BasePc(Ljp_BaseClass):
         async with self._session_lock:
             if self.session is not None:
                 return
-            self.session = await self._create_session_impl(headers=headers or self.config.headers)
+            default_headers = self.config.request_headers
+            self.session = await self._create_session_impl(headers=headers or default_headers)
             await self.init_login()
             self.info("session initialized")
 
     def change_session_cookies(self, cookies: Dict[str, str], session: Any = None) -> None:
         target_session = session or self.session
-        self.config.cookies.update(cookies)
+        self.config.update_request_cookies(cookies)
         if target_session is not None:
             self.req.update_cookies(target_session, cookies)
 

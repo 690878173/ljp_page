@@ -1,26 +1,16 @@
-# 03-28-16-49-10
+# 03-31-20-21-05
 """请求中间件基础协议（同步/异步）。"""
 
 from __future__ import annotations
 
 from abc import ABC
-from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable, Dict
+from typing import Any, Awaitable, Callable
 
-from ljp_page.modules.request.config.request_config import (
+from ljp_page.config.request_config.session_config import (
     LjpRequestException,
     LjpResponse,
     RequestContext,
 )
-_STR_BASE = 'base'
-
-@dataclass
-class Ljp_MiddlewareContext:
-    input: Any
-    output: Any
-    state: Dict[str, Any] = field(default_factory=dict)
-
-
 
 SyncNextHandler = Callable[[RequestContext], LjpResponse]
 AsyncNextHandler = Callable[[RequestContext], Awaitable[LjpResponse]]
@@ -29,59 +19,93 @@ AsyncNextHandler = Callable[[RequestContext], Awaitable[LjpResponse]]
 class Ljp_MiddlewareBase(ABC):
     """中间件根基类。"""
 
-    name = _STR_BASE
+    name = "base"
 
 
-class Ljp_SyncMiddleware(Ljp_MiddlewareBase):
+class SyncMiddleware(Ljp_MiddlewareBase):
+    """同步中间件基类。"""
 
-    def handle(self,
-               ctx:Ljp_MiddlewareContext,
-               next_handler):
+    def handle(
+        self,
+        context: RequestContext,
+        next_handler: SyncNextHandler,
+        session: Any,
+    ) -> LjpResponse:
         try:
-            ctx = self.before(ctx)
-            response = next_handler(ctx)
-            return self.after(ctx, response)
+            self.before_request(context, session)
+            response = next_handler(context)
+            return self.after_response(context, response, session)
         except Exception as error:
-            self.on_error(ctx, error)
+            self.on_error(context, error, session)
             raise
 
-    def before(self, ctx: Ljp_MiddlewareContext):
-        return ctx
+    def before_request(self, context: RequestContext, session: Any) -> None:
+        return None
 
-    def after(self, ctx, response):
+    def after_response(
+        self,
+        context: RequestContext,
+        response: LjpResponse,
+        session: Any,
+    ) -> LjpResponse:
         return response
 
-    def on_error(self, ctx, error):
+    def on_error(
+        self,
+        context: RequestContext,
+        error: Exception | LjpRequestException,
+        session: Any,
+    ) -> None:
         return None
 
 
-class Ljp_AsyncMiddleware(Ljp_MiddlewareBase):
+class AsyncMiddleware(Ljp_MiddlewareBase):
+    """异步中间件基类。"""
 
     async def handle(
-            self,
-            ctx,
-            next_handler: AsyncNextHandler,
-    ):
+        self,
+        context: RequestContext,
+        next_handler: AsyncNextHandler,
+        session: Any,
+    ) -> LjpResponse:
         try:
-            await self.before(ctx)
-            response = await next_handler(ctx)
-            return await self.after(ctx, response)
+            await self.before_request(context, session)
+            response = await next_handler(context)
+            return await self.after_response(context, response, session)
         except Exception as error:
-            await self.on_error(ctx, error)
+            await self.on_error(context, error, session)
             raise
 
-    async def before(self, ctx):
-        return ctx
+    async def before_request(self, context: RequestContext, session: Any) -> None:
+        return None
 
-    async def after(self, ctx, response):
+    async def after_response(
+        self,
+        context: RequestContext,
+        response: LjpResponse,
+        session: Any,
+    ) -> LjpResponse:
         return response
 
-    async def on_error(self, ctx, error):
+    async def on_error(
+        self,
+        context: RequestContext,
+        error: Exception | LjpRequestException,
+        session: Any,
+    ) -> None:
         return None
+
+
+# 兼容别名
+Ljp_SyncMiddleware = SyncMiddleware
+Ljp_AsyncMiddleware = AsyncMiddleware
+
 __all__ = [
+    "AsyncMiddleware",
     "AsyncNextHandler",
+    "Ljp_AsyncMiddleware",
     "Ljp_MiddlewareBase",
-    "SyncNextHandler",
     "Ljp_SyncMiddleware",
-    "Ljp_MiddlewareContext",
+    "SyncMiddleware",
+    "SyncNextHandler",
 ]
