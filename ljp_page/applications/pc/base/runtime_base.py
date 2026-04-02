@@ -1,5 +1,5 @@
 ﻿# 03-31-22-35-00
-"""PC crawler runtime base class."""
+"""PC crawler _runtime base class."""
 
 from __future__ import annotations
 
@@ -8,17 +8,17 @@ import inspect
 import threading
 from typing import Any, Dict, List, Optional
 
-from ....file import Directory, FileHandle
-from ....logger import Logger
-from ....modules.request import Requests
-from ljp_page.core.base.Ljp_base_class import Ljp_BaseClass
+from ljp_page.utils.file import Directory, FileHandle
+from ljp_page._modules.logger import Logger
+from ljp_page._modules.request import Requests
+from ljp_page._core.base.Ljp_base_class import Ljp_BaseClass
 
 from .models import Mode, P1Result, P2ParseResult, P2Result, P3ParseResult, P3Result, PcConfig
 from .runtime_executor import CrawlerRuntime, CrawlerRuntimeConfig
 
 
 class BasePc(Ljp_BaseClass):
-    """Shared runtime base class for PC crawlers."""
+    """Shared _runtime base class for PC crawlers."""
 
     Config = PcConfig
     P1Result = P1Result
@@ -324,3 +324,6 @@ class BasePc(Ljp_BaseClass):
 
 
 __all__ = ["BasePc"]
+
+
+

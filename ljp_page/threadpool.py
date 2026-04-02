@@ -1,1 +1,3 @@
-from ljp_page.runtime.threadpool import ThreadPool
+﻿from ljp_page._runtime.threadpool import ThreadPool
+
+__all__ = ["ThreadPool"]

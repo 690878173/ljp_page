@@ -7,7 +7,7 @@ import asyncio
 from pathlib import Path
 from typing import Any, Sequence
 
-from ljp_page.core.base.Ljp_base_class import Ljp_BaseClass
+from ljp_page._core.base.Ljp_base_class import Ljp_BaseClass
 
 from .ffmpeg import FfmpegConfig, FfmpegVideoMerger
 from .m3u8_parser import M3u8Parser

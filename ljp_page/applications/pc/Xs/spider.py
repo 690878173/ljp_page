@@ -1,11 +1,11 @@
-# 03-28-21-22-00
+﻿# 04-01-20-18-00
 """Xs 爬虫核心实现。"""
 
 from __future__ import annotations
 
 from typing import Any
 
-from ljp_page.applications.pc.base.base_pc import Pc
+from ..base import Pc
 
 from .manager import XsManager
 

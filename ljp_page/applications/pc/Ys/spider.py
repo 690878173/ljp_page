@@ -1,16 +1,16 @@
-# 03-29-00-23-00
+﻿# 04-01-20-19-00
 """影视爬虫基类。"""
 
 from __future__ import annotations
 
 import inspect
 from abc import ABC, abstractmethod
-from typing import Any, List, Optional
+from typing import Any, Optional
 
-from ljp_page.applications.pc.base.base_pc import BasePc
-from ljp_page.exceptions import MeetCheckError
-from ljp_page.logger import Logger
+from ljp_page._core.exceptions import MeetCheckError
+from ljp_page._modules.logger import Logger
 
+from ..base import BasePc
 from .manager import BaseVideoManager, VideoManager
 from .models import PageParseResult, VideoInfo, YsConfig
 
@@ -61,7 +61,7 @@ class VideoSpiderBase(BasePc, ABC):
             raise TypeError("parse_video_info must return VideoInfo")
         return parsed
 
-    async def _process_page(self, page_id: Any) -> List[Any]:
+    async def _process_page(self, page_id: Any) -> list[Any]:
         if not self.config.page_url:
             raise ValueError("ys mode2 requires page_url")
         page_url = self.config.page_url.format(page_id)

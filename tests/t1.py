@@ -1,4 +1,4 @@
-from ljp_page.request import Requests,create_session
+from ljp_page._modules.request.facade import create_session
 
 
 url =  'https://apibi.cc/api/chapter?id=2530&chapterid=1'

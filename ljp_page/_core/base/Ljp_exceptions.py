@@ -1,0 +1,46 @@
+﻿# 04-01-20-05-00
+"""异常兼容导出，实际定义位于 ljp_page._core.exceptions。"""
+
+from ljp_page._core.exceptions import (
+    ALL_EXCEPTIONS,
+    CaptchaException,
+    ConfigError,
+    EncodingException,
+    HTTPStatusException,
+    LjpBaseException,
+    LjpRequestException,
+    MaxRetriesException,
+    MeetCheckError,
+    NetworkError,
+    NetworkException,
+    No,
+    Notfound,
+    ParseError,
+    ProxyException,
+    ResponseParseException,
+    SSLException,
+    TimeoutException,
+    Yes,
+)
+
+__all__ = [
+    "ALL_EXCEPTIONS",
+    "CaptchaException",
+    "ConfigError",
+    "EncodingException",
+    "HTTPStatusException",
+    "LjpBaseException",
+    "LjpRequestException",
+    "MaxRetriesException",
+    "MeetCheckError",
+    "NetworkError",
+    "NetworkException",
+    "No",
+    "Notfound",
+    "ParseError",
+    "ProxyException",
+    "ResponseParseException",
+    "SSLException",
+    "TimeoutException",
+    "Yes",
+]

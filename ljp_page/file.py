@@ -1,6 +1,4 @@
-"""Public file utility exports."""
-
-from .utils.file import (
+﻿from ljp_page.utils.file import (
     Directory,
     FileHandle,
     YsDirectory,
@@ -10,6 +8,7 @@ from .utils.file import (
     unbz2_one,
     unzip,
 )
+
 
 __all__ = [
     "Directory",

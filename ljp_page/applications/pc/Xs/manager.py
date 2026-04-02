@@ -1,12 +1,13 @@
-# 03-28-21-22-00
+﻿# 04-01-20-18-00
 """Xs 章节管理器实现。"""
 
 from __future__ import annotations
 
 import re
 
-from ljp_page.applications.pc.base.base_pc import BaseManager
-from ljp_page.exceptions import No
+from ljp_page._core.exceptions import No
+
+from ..base import BaseManager
 
 
 class XsManager(BaseManager):

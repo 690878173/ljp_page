@@ -1,4 +1,4 @@
-# 03-28-21-22-00
+﻿# 04-01-20-18-00
 """Dybz 站点示例解析实现。"""
 
 from __future__ import annotations
@@ -10,9 +10,9 @@ try:
 except ImportError:  # pragma: no cover
     winsound = None
 
-from ljp_page.applications.pc.base.base_pc import Pc
-from ljp_page.request import Html
+from ljp_page._modules.request import Html
 
+from ..base import Pc
 from .ui import XsUI
 
 

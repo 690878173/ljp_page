@@ -37,6 +37,7 @@ dependencies = [
     "lightgbm>=4.6.0",
     "catboost>=1.2.10",
     "ipykernel>=7.2.0",
+    "aiofiles>=25.1.0",
 ]
 
 [project.optional-dependencies]
@@ -57,9 +58,15 @@ Issues = "https://github.com/yourusername/ljp-package/issues"
 requires = ["setuptools>=68.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools]
+include-package-data = true
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["ljp_page*"]
+
+[tool.setuptools.package-data]
+ljp_page = ["py.typed", "*.pyi", "**/*.pyi"]
 
 [tool.black]
 line-length = 100

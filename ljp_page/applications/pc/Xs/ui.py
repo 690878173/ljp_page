@@ -1,4 +1,4 @@
-# 03-28-21-22-00
+﻿# 04-01-20-18-00
 """Xs 调试 UI。"""
 
 from __future__ import annotations
@@ -7,7 +7,7 @@ import ast
 import tkinter as tk
 from tkinter import messagebox
 
-from ljp_page.logger import Logger
+from ljp_page._modules.logger import Logger
 
 from .spider import Xs
 

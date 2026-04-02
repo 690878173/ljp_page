@@ -34,20 +34,21 @@ pip install -e .
 ### 1) 门面 Requests（最简单）
 
 ```python
-from ljp_page.request import Requests
+from ljp_page.out.request import Requests
 
 req = Requests()
 res = req.get("https://www.baidu.com")
 
 print(res.status_code)  # 默认返回 LjpResponse
-print(res)              # 打印响应摘要，不包含正文内容
-print(res.text[:100])   # 需要正文时再取
+print(res)  # 打印响应摘要，不包含正文内容
+print(res.text[:100])  # 需要正文时再取
 ```
 
 ### 2) create_session（推荐进阶）
 
 ```python
-from ljp_page.request import create_session
+
+from ljp_page._modules.request import create_session
 
 session = create_session("sync", base_url="https://httpbin.org")
 res = session.get("/get")
@@ -62,7 +63,8 @@ session.close()
 ## 1) 怎么改重试次数
 
 ```python
-from ljp_page.request import create_session
+
+from ljp_page._modules.request import create_session
 
 session = create_session("sync", retry={"total": 5})
 ```
@@ -70,7 +72,7 @@ session = create_session("sync", retry={"total": 5})
 门面写法：
 
 ```python
-from ljp_page.request import Requests
+from ljp_page.out.request import Requests
 
 req = Requests(Requests.Config(max_retries=5))
 ```
@@ -78,7 +80,8 @@ req = Requests(Requests.Config(max_retries=5))
 ## 2) 怎么改日志输出级别
 
 ```python
-from ljp_page.request import create_session
+
+from ljp_page._modules.request import create_session
 
 session = create_session(
     "sync",
@@ -101,7 +104,8 @@ session = create_session(
 ## 3) 怎么控制默认内置中间件开关
 
 ```python
-from ljp_page.request import create_session
+
+from ljp_page._modules.request import create_session
 
 session = create_session(
     "sync",
@@ -133,8 +137,8 @@ session = create_session(
 ### 同步示例
 
 ```python
-from ljp_page.core.middleware import SyncMiddleware
-from ljp_page.request import create_session
+from ljp_page._core.middleware import SyncMiddleware
+from ljp_page._modules.request import create_session
 
 
 class MyMiddleware(SyncMiddleware):
@@ -160,8 +164,8 @@ session.close()
 
 ```python
 import asyncio
-from ljp_page.core.middleware import AsyncMiddleware
-from ljp_page.request import create_session
+from ljp_page._core.middleware import AsyncMiddleware
+from ljp_page.out.request import create_session
 
 
 class MyAsyncMiddleware(AsyncMiddleware):
@@ -227,7 +231,7 @@ with open("captcha.png", "rb") as f:
 
 ```python
 import asyncio
-from ljp_page.playwright import Playwright
+from ljp_page.out.playwright import Playwright
 
 
 async def main():
@@ -243,7 +247,7 @@ asyncio.run(main())
 ### 线程池
 
 ```python
-from ljp_page.threadpool import ThreadPool
+from ljp_page.out.threadpool import ThreadPool
 
 with ThreadPool(max_workers=4) as pool:
     future = pool.submit(lambda x: x * 2, 21)

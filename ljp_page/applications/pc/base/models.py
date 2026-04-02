@@ -1,5 +1,5 @@
 ﻿# 03-31-22-05-00
-"""PC crawler data models and runtime config."""
+"""PC crawler data models and _runtime config."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, List, Optional, Tuple
 
-from ljp_page.config import LjpConfig
+from ljp_page._modules.request.Config.config import LjpConfig
 
 
 class Mode:

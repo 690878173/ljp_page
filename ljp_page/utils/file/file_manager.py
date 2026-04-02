@@ -7,7 +7,7 @@ from typing import Optional, Any, Dict, List
 
 import aiofiles
 
-from ljp_page.core.base.Ljp_base_class import Ljp_BaseClass
+from ljp_page._core.base.Ljp_base_class import Ljp_BaseClass
 
 
 class _FileHandleBase(Ljp_BaseClass):

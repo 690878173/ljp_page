@@ -1,11 +1,13 @@
 from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from sklearn.decomposition import PCA
 from sklearn.metrics import confusion_matrix
 import seaborn as sns
 
-from multimodal import *
+from ljp_page.data_analysis.ml.multimodal.multimodal import Multimodal
+from ljp_page.data_analysis.visualization.matplotlib import Matplotlib
 from sklearn.metrics import adjusted_rand_score
 
 class create_data:

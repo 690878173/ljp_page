@@ -1,5 +1,5 @@
-from ljp_page.request import Requests
-# 什么都还未开始
+﻿from ljp_page._modules.request import Requests
+# 浠€涔堥兘杩樻湭寮€濮?
 
 
 
@@ -20,15 +20,15 @@ class JW:
 
     def init_session(self):
         # self.session = requests.session()
-        # 配置重试策略
+        # 閰嶇疆閲嶈瘯绛栫暐
         retries = Retry(
-            total=3,  # 总共重试3次
-            backoff_factor=1,  # 每次重试的退避因子（等待时间）：1→2→4秒
-            status_forcelist=[500, 502, 503, 504],  # 遇到这些状态码时重试
-            allowed_methods=["GET", "POST"]  # 允许重试的请求方法
+            total=3,  # 鎬诲叡閲嶈瘯3娆?
+            backoff_factor=1,  # 姣忔閲嶈瘯鐨勯€€閬垮洜瀛愶紙绛夊緟鏃堕棿锛夛細1鈫?鈫?绉?
+            status_forcelist=[500, 502, 503, 504],  # 閬囧埌杩欎簺鐘舵€佺爜鏃堕噸璇?
+            allowed_methods=["GET", "POST"]  # 鍏佽閲嶈瘯鐨勮姹傛柟娉?
         )
 
-        # 将重试策略应用到所有 HTTP 和 HTTPS 请求
+        # 灏嗛噸璇曠瓥鐣ュ簲鐢ㄥ埌鎵€鏈?HTTP 鍜?HTTPS 璇锋眰
         self.session.mount("http://", HTTPAdapter(max_retries=retries))
         self.session.mount("https://", HTTPAdapter(max_retries=retries))
 
@@ -41,7 +41,7 @@ class JW:
         response = self.session.get(url, headers=self.headers, allow_redirects=False)
         return response.headers['Location'],url
     def init_login(self):
-        print('初始化登录')
+        print('鍒濆鍖栫櫥褰?)
         url = 'https://jw.v.hbfu.edu.cn/jsxsd/'
         next_url,refer = self.get_next_url(url,'') # https://v.hbfu.edu.cn:443/vpn_key/update?origin=https%3A%2F%2Fjw.v.hbfu.edu.cn%2Fjsxsd%2F&reason=site+jw.v.hbfu.edu.cn+not+found
 
@@ -61,26 +61,26 @@ class JW:
 
     def login(self):
         refer = self.init_login()
-        print('登录')
+        print('鐧诲綍')
         def get_password(password):
             def qk(t: str, n: str, l: str) -> str:
                 """
-                等效于 JavaScript 中的 qk 函数
-                使用固定 IV 进行 AES-CBC 加密，返回 Base64 编码的密文
+                绛夋晥浜?JavaScript 涓殑 qk 鍑芥暟
+                浣跨敤鍥哄畾 IV 杩涜 AES-CBC 鍔犲瘑锛岃繑鍥?Base64 缂栫爜鐨勫瘑鏂?
                 """
-                # 将输入转换为 bytes
+                # 灏嗚緭鍏ヨ浆鎹负 bytes
                 plaintext = t.encode('utf-8')
                 key = n.encode('utf-8')
                 iv = l.encode('utf-8')
 
-                # 创建 AES-CBC 加密器
+                # 鍒涘缓 AES-CBC 鍔犲瘑鍣?
                 cipher = AES.new(key, AES.MODE_CBC, iv)
 
-                # 对明文进行 PKCS7 填充并加密
+                # 瀵规槑鏂囪繘琛?PKCS7 濉厖骞跺姞瀵?
                 padded_data = pad(plaintext, AES.block_size)
                 ciphertext = cipher.encrypt(padded_data)
 
-                # 返回 Base64 编码的密文
+                # 杩斿洖 Base64 缂栫爜鐨勫瘑鏂?
                 return base64.b64encode(ciphertext).decode('ascii')
 
             if (password.startswith('phone_msg') and '###' in password) or (password.startswith('qrcode')):
@@ -88,12 +88,12 @@ class JW:
             return qk(password, 'UH1eN7apoK9lY5VB', 'VkRu0s6hLfFriZDW')
         url = 'https://oa-443.v.hbfu.edu.cn/backstage/cas/login'
         data = {
-            'username': self.username,  # 原始
-            'password': get_password(self.password),  # 加密
-            'execution': self.execution,  # 未知
+            'username': self.username,  # 鍘熷
+            'password': get_password(self.password),  # 鍔犲瘑
+            'execution': self.execution,  # 鏈煡
             '_eventId': 'submit',
-            'geolocation': '',  # 空
-            'captcha': '',  # 空
+            'geolocation': '',  # 绌?
+            'captcha': '',  # 绌?
             'rememberMe': 'false',
             'domain': self.url_get_host(url),
             'tenantId': ''
@@ -127,7 +127,7 @@ class JW:
         self.headers['Referer'] = url
         response = self.session.get(nt_url, headers=self.headers, allow_redirects=False)
         self.login_is = True
-        print('登录成功')
+        print('鐧诲綍鎴愬姛')
 
     def get_course_grades(self,time):
         if not self.login_is:

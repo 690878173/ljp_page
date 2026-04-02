@@ -1,14 +1,14 @@
-# 03-28-23-55-00
+﻿# 04-01-20-20-00
 """PC 文本站点业务基类。"""
 
 from __future__ import annotations
 
 import asyncio
 import inspect
-from typing import Any, List, Tuple
+from typing import Any
 
-from ....exceptions import MeetCheckError, No, Notfound
-from ....logger import Logger
+from ljp_page._core.exceptions import MeetCheckError, No, Notfound
+from ljp_page._modules.logger import Logger
 
 from .manager_base import BaseManager
 from .runtime_base import BasePc
@@ -65,7 +65,7 @@ class Pc(BasePc):
             normalized.append((str(chapter_title or ""), str(chapter_url)))
         return normalized
 
-    async def _process_page(self, page_id: Any) -> List[Any]:
+    async def _process_page(self, page_id: Any) -> list[Any]:
         if not self.config.p1_url:
             raise ValueError("mode2 requires p1_url")
 
@@ -86,7 +86,7 @@ class Pc(BasePc):
         base_url = self.config.p2_url.format(p2_id)
         current_url = base_url
 
-        all_p3s: List[Tuple[str, str]] = []
+        all_p3s: list[tuple[str, str]] = []
         title = ""
         author = ""
         description = ""
@@ -138,13 +138,13 @@ class Pc(BasePc):
     async def _parse_p3_info(
         self,
         p3_id: int,
-        p3: Tuple[str, str],
+        p3: tuple[str, str],
         p2_title: str,
         manager: BaseManager,
     ) -> None:
         chapter_title, chapter_url = p3
         current_url = chapter_url
-        chunks: List[str] = []
+        chunks: list[str] = []
 
         while current_url:
             if self.stop_flag:
@@ -198,10 +198,10 @@ class Pc(BasePc):
             if not await manager.init():
                 return
 
-            # 中文注释：章节抓取可能很多，用信号量控制内层并发，避免一次性压垮目标站点。
+            # 章节抓取可能很多，用信号量控制并发，避免压垮目标站点。
             semaphore = asyncio.Semaphore(max(1, self.config.chapter_concurrency))
 
-            async def _chapter_task(chapter_id: int, chapter: Tuple[str, str]) -> None:
+            async def _chapter_task(chapter_id: int, chapter: tuple[str, str]) -> None:
                 async with semaphore:
                     await self._parse_p3_info(chapter_id, chapter, p2_result.title, manager)
 

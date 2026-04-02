@@ -1,5 +1,5 @@
-# 03-28-23-40-00
-"""PC 爬虫运行时调度器：统一接入 LJPExc。"""
+﻿# 04-01-20-23-00
+"""PC 爬虫运行时调度器。"""
 
 from __future__ import annotations
 
@@ -7,9 +7,7 @@ import asyncio
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Iterable, Sequence
 
-from ljp_page.core.base.Ljp_base_class import Ljp_BaseClass
-from ljp_page.runtime.ljp_exc.exc import LJPExc
-from ljp_page.runtime.ljp_exc.task import TaskHandle
+from ljp_page._core.base.Ljp_base_class import Ljp_BaseClass
 
 
 @dataclass(slots=True)
@@ -22,11 +20,15 @@ class CrawlerRuntimeConfig:
 
 
 class CrawlerRuntime(Ljp_BaseClass):
-    """统一调度封装，负责线程任务与协程任务的提交。"""
+    """统一调度封装，负责线程任务与协程任务提交。"""
 
     def __init__(self, config: CrawlerRuntimeConfig, logger: Any = None) -> None:
         super().__init__(logger=logger)
         self.config = config
+
+        # 避免在模块导入阶段触发 _runtime 子系统的重依赖。
+        from ljp_page._runtime.ljp_exc.exc import LJPExc
+
         self.exc = LJPExc(
             logger=logger,
             thread_max_workers=config.thread_max_workers,
@@ -59,16 +61,12 @@ class CrawlerRuntime(Ljp_BaseClass):
         return True
 
     def run_async(self, coro: Awaitable[Any], blocking: bool = True) -> Any:
-        """提交外层协程任务。blocking=True 时直接返回结果。"""
-
         handle = self.exc.submit(coro, mode="async")
         if blocking:
             return handle.result()
         return handle
 
     async def run_in_thread(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
-        """在线程池中执行同步函数，并在协程中等待结果。"""
-
         handle = self.exc.submit(func, *args, mode="thread", **kwargs)
         return await handle
 
@@ -78,13 +76,11 @@ class CrawlerRuntime(Ljp_BaseClass):
         *,
         return_exceptions: bool = False,
     ) -> list[Any]:
-        """在内层并发语义下批量执行协程任务。"""
-
         tasks: Sequence[Awaitable[Any]] = list(coroutines)
         if not tasks:
             return []
 
-        handles: list[TaskHandle[Any]] = self.exc.submit_many_inside(tasks, mode="async")
+        handles = self.exc.submit_many_inside(tasks, mode="async")
         results: list[Any] = []
         for handle in handles:
             try:

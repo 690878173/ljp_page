@@ -1,4 +1,4 @@
-# 03-28-21-05-00
+﻿# 04-01-20-20-00
 """PC 章节写入管理器基类。"""
 
 from __future__ import annotations
@@ -6,10 +6,10 @@ from __future__ import annotations
 import asyncio
 import inspect
 import re
-from typing import Any, Dict
+from typing import Any
 
-from ....logger import Logger
-from ljp_page.core.base.Ljp_base_class import Ljp_BaseClass
+from ljp_page._core.base.Ljp_base_class import Ljp_BaseClass
+from ljp_page._modules.logger import Logger
 
 from .models import P2Result, P3Result
 
@@ -27,7 +27,7 @@ class BaseManager(Ljp_BaseClass):
         self.logger = log
 
         self.expected_id = 1
-        self.pending: Dict[int, BaseManager.P3Result] = {}
+        self.pending: dict[int, BaseManager.P3Result] = {}
         self._lock = asyncio.Lock()
         self._initialized = False
 

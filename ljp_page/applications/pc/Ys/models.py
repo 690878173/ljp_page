@@ -1,12 +1,12 @@
-# 03-29-00-00-00
+﻿# 04-01-20-19-00
 """影视爬虫数据模型与配置。"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, List, Optional
+from typing import Any, Optional
 
-from ljp_page.applications.pc.base.models import Mode, PcConfig
+from ..base.models import Mode, PcConfig
 
 
 @dataclass
@@ -27,7 +27,7 @@ class VideoInfo:
     title: str
     url: str
     description: str
-    episodes: List[VideoEpisode] = field(default_factory=list)
+    episodes: list[VideoEpisode] = field(default_factory=list)
 
     @property
     def total_episodes(self) -> int:
@@ -38,7 +38,7 @@ class VideoInfo:
 class PageParseResult:
     """分页解析结果。"""
 
-    items: List[Any] = field(default_factory=list)
+    items: list[Any] = field(default_factory=list)
     next_url: Optional[str] = None
 
 

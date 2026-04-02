@@ -1,1 +1,6 @@
-from ljp_page.utils.logger.logger import Logger
+﻿# 04-01-20-03-00
+"""Public logger exports."""
+
+from ljp_page._modules.logger import Logger,LogConfig
+
+__all__ = ["Logger",'LogConfig']
