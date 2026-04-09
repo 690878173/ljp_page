@@ -8,8 +8,11 @@
     SessionMetrics,
     SyncSession,
     create_session,
+async_create_session,
+sync_create_session
+
 )
-from ljp_page._modules.request.Config.config import (
+from ljp_page._modules.request.Config import (
     get_request_config,
     merge_request_config,
     reset_request_config,
@@ -18,7 +21,7 @@ from ljp_page._modules.request.Config.config import (
     RequestConfig,
     LjpConfig
 )
-from ljp_page._modules.logger import LogConfig
+from ljp_page._core.logger import LogConfig
 
 __all__ = [
     "AsyncSession",
@@ -37,5 +40,7 @@ __all__ = [
     "set_request_config",
     "update_request_config",
     'LjpConfig',
-    'RequestConfig'
+    'RequestConfig',
+    'async_create_session',
+    'sync_create_session',
 ]

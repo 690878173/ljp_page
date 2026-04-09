@@ -1,6 +1,3 @@
-# 04-01-21-10-00
-"""请求上下文与响应对象定义。"""
-
 from __future__ import annotations
 
 import json

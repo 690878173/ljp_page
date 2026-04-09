@@ -9,7 +9,7 @@ import re
 from typing import Any
 
 from ljp_page._core.base.Ljp_base_class import Ljp_BaseClass
-from ljp_page._modules.logger import Logger
+from ljp_page._core.logger import Logger
 
 from .models import P2Result, P3Result
 
@@ -45,10 +45,10 @@ class BaseManager(Ljp_BaseClass):
             result = self.target_init()
             if inspect.isawaitable(result):
                 await result
-            self.info(f"manager initialized: {self.data.title}")
+            self.info(f"管理器初始化: {self.data.title}")
             return True
         except Exception as exc:
-            self.error(f"manager init failed: {self.data.title}, error: {exc}")
+            self.error(f"管理器初始化失败: {self.data.title}, error: {exc}")
             return False
 
     async def target_init(self) -> None:

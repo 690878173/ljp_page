@@ -272,15 +272,26 @@ def create_session(
             middlewares=middlewares,
         )
     raise ValueError("mode 必须是 'sync' 或 'async'")
+def async_create_session(
+    **options: Any,
+) -> SyncSession | AsyncSession:
+    """创建同步或异步会话。"""
+    return create_session(mode='async',**options)
 
-
+def sync_create_session(
+    **options: Any,
+) -> SyncSession | AsyncSession:
+    """创建同步或异步会话。"""
+    return create_session(mode='sync',**options)
 __all__ = [
     "AsyncSession",
     "LjpRequestException",
     "LjpResponse",
     "Requests",
     "SyncSession",
-    "create_session"
+    "create_session",
+    'async_create_session',
+    "sync_create_session",
 ]
 
 

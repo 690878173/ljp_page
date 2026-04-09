@@ -1,4 +1,5 @@
-from .base import BaseModel, ModelType, MetricNames
+# 生成时间：04-08-16-20-59
+from .base import BaseModel, MetricNames, ModelType, TabularData
 from .Classification import (
     CatBoostClassifierModel,
     LightGBMClassifierModel,
@@ -34,6 +35,7 @@ __all__ = [
     "BaseModel",
     "ModelType",
     "MetricNames",
+    "TabularData",
     "KMeanCluster",
     "KmeanCluster",
     "kmeans_auto",

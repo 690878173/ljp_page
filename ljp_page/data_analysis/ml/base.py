@@ -1,3 +1,4 @@
+# 生成时间：04-08-16-20-59
 """机器学习模型通用基类。"""
 
 from __future__ import annotations
@@ -6,13 +7,25 @@ import pickle
 from abc import ABC, abstractmethod
 from enum import Enum
 from pathlib import Path
-from typing import Any, Mapping, Optional, Union
+from typing import Any, Callable, Mapping, Optional, Sequence, Union
 
 import numpy as np
 import pandas as pd
+from sklearn.metrics import (
+    accuracy_score,
+    f1_score,
+    mean_absolute_error,
+    mean_squared_error,
+    precision_score,
+    r2_score,
+    recall_score,
+    silhouette_score,
+)
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 
-class ModelType(Enum):
+class ModelType(str, Enum):
     """模型类型枚举。"""
 
     CLUSTER = "cluster"
@@ -78,21 +91,26 @@ _METRIC_MODEL_MAPPING: dict[str, ModelType] = {
     MetricNames.EXPLAINED_VARIANCE: ModelType.DIMENSIONALITY_REDUCTION,
 }
 
-_SUPPORTED_METRICS_BY_MODEL: dict[ModelType, list[str]] = {
-    ModelType.CLUSTER: [MetricNames.SILHOUETTE_SCORE, MetricNames.INERTIA],
-    ModelType.REGRESSION: [
+_SUPPORTED_METRICS_BY_MODEL: dict[ModelType, tuple[str, ...]] = {
+    ModelType.CLUSTER: (MetricNames.SILHOUETTE_SCORE, MetricNames.INERTIA),
+    ModelType.REGRESSION: (
         MetricNames.R2_SCORE,
         MetricNames.MSE,
         MetricNames.MAE,
         MetricNames.RMSE,
-    ],
-    ModelType.CLASSIFICATION: [
+    ),
+    ModelType.CLASSIFICATION: (
         MetricNames.ACCURACY,
         MetricNames.PRECISION,
         MetricNames.RECALL,
         MetricNames.F1_SCORE,
-    ],
-    ModelType.DIMENSIONALITY_REDUCTION: [MetricNames.EXPLAINED_VARIANCE],
+    ),
+    ModelType.DIMENSIONALITY_REDUCTION: (MetricNames.EXPLAINED_VARIANCE,),
+}
+
+_SCALER_MAPPING = {
+    "standard": StandardScaler,
+    "minmax": MinMaxScaler,
 }
 
 
@@ -110,7 +128,7 @@ class BaseModel(ABC):
     def __init__(
         self,
         data: Union[np.ndarray, pd.DataFrame, pd.Series],
-        model_type: ModelType,
+        model_type: Union[ModelType, str],
         random_state: int = 42,
     ):
         self.data = self._convert_data(data, ensure_2d=True)
@@ -141,7 +159,7 @@ class BaseModel(ABC):
             )
 
     def _invalidate_metrics_cache(self) -> None:
-        """清空指标缓存（模型重训后建议调用）。"""
+        """清空指标缓存。"""
         self._metrics_cache.clear()
 
     def _mark_fitted(self, fitted: bool = True) -> None:
@@ -156,7 +174,7 @@ class BaseModel(ABC):
 
     def _convert_data(
         self,
-        data: Union[np.ndarray, pd.DataFrame, pd.Series, list],
+        data: Union[np.ndarray, pd.DataFrame, pd.Series, list, tuple],
         *,
         ensure_2d: bool = False,
     ) -> np.ndarray:
@@ -164,12 +182,12 @@ class BaseModel(ABC):
         将输入数据统一转换为 numpy 数组。
 
         规则：
-        - DataFrame/Series 取 `.values`；
+        - DataFrame/Series 转为 `.to_numpy()`；
         - 标量数据不允许；
         - `ensure_2d=True` 时，1 维数据自动升维为 `(-1, 1)`。
         """
         if isinstance(data, (pd.DataFrame, pd.Series)):
-            array = data.values
+            array = data.to_numpy()
         else:
             array = np.asarray(data)
 
@@ -181,6 +199,7 @@ class BaseModel(ABC):
                 array = array.reshape(-1, 1)
             elif array.ndim != 2:
                 raise ValueError(f"输入数据必须是二维矩阵，当前维度: {array.ndim}")
+
         return array
 
     def _check_array_finite(self, data: np.ndarray, *, allow_nan: bool = False) -> None:
@@ -198,13 +217,53 @@ class BaseModel(ABC):
                 f"y_true 与 y_pred 长度不一致: {y_true.shape[0]} != {y_pred.shape[0]}"
             )
 
+    def _prepare_target_arrays(
+        self,
+        y_true: Union[np.ndarray, pd.Series, list],
+        y_pred: Union[np.ndarray, pd.Series, list],
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """统一处理监督学习指标的输入。"""
+        y_true_arr = self._convert_data(y_true).ravel()
+        y_pred_arr = self._convert_data(y_pred).ravel()
+        self._check_target_shape(y_true_arr, y_pred_arr)
+        return y_true_arr, y_pred_arr
+
+    def _compute_supervised_metric(
+        self,
+        metric_name: str,
+        scorer: Callable[..., float],
+        y_true: Union[np.ndarray, pd.Series, list],
+        y_pred: Union[np.ndarray, pd.Series, list],
+        **kwargs: Any,
+    ) -> float:
+        """复用监督学习指标的公共校验与计算流程。"""
+        self._check_is_fitted()
+        self._check_metric_support(metric_name)
+        y_true_arr, y_pred_arr = self._prepare_target_arrays(y_true, y_pred)
+        return float(scorer(y_true_arr, y_pred_arr, **kwargs))
+
+    def _get_cached_metric(
+        self,
+        metric_name: str,
+        use_cache: bool,
+        calculator: Callable[[], float],
+    ) -> float:
+        """统一处理训练态指标缓存。"""
+        if use_cache and metric_name in self._metrics_cache:
+            return self._metrics_cache[metric_name]
+
+        value = float(calculator())
+        if use_cache:
+            self._metrics_cache[metric_name] = value
+        return value
+
     def get_silhouette_score(
         self,
         data: Optional[Union[np.ndarray, pd.DataFrame]] = None,
         labels: Optional[Union[np.ndarray, list[int]]] = None,
     ) -> float:
         """
-        计算轮廓系数（聚类模型专用）。
+        计算轮廓系数。
 
         注意：
         - 如果未传 `labels`，默认使用 `predict(data)` 生成；
@@ -212,36 +271,35 @@ class BaseModel(ABC):
         """
         self._check_is_fitted()
         self._check_metric_support(MetricNames.SILHOUETTE_SCORE)
-
         use_cache = data is None and labels is None
-        cache_key = MetricNames.SILHOUETTE_SCORE
-        if use_cache and cache_key in self._metrics_cache:
-            return self._metrics_cache[cache_key]
 
-        eval_data = self._convert_data(self.data if data is None else data, ensure_2d=True)
-        eval_labels = (
-            np.asarray(self.predict(eval_data)).ravel()
-            if labels is None
-            else np.asarray(labels).ravel()
-        )
-        if eval_data.shape[0] != eval_labels.shape[0]:
-            raise ValueError(
-                f"样本数与标签数不一致: {eval_data.shape[0]} != {eval_labels.shape[0]}"
+        def calculate() -> float:
+            eval_data = self._convert_data(
+                self.data if data is None else data,
+                ensure_2d=True,
             )
+            eval_labels = (
+                np.asarray(self.predict(eval_data)).ravel()
+                if labels is None
+                else np.asarray(labels).ravel()
+            )
+            if eval_data.shape[0] != eval_labels.shape[0]:
+                raise ValueError(
+                    f"样本数与标签数不一致: {eval_data.shape[0]} != {eval_labels.shape[0]}"
+                )
 
-        unique_labels = np.unique(eval_labels)
-        if unique_labels.size < 2:
-            raise ValueError("聚类簇数量小于 2，无法计算 silhouette_score")
+            if np.unique(eval_labels).size < 2:
+                raise ValueError("聚类簇数量小于 2，无法计算 silhouette_score")
+            return float(silhouette_score(eval_data, eval_labels))
 
-        from sklearn.metrics import silhouette_score
-
-        score = float(silhouette_score(eval_data, eval_labels))
-        if use_cache:
-            self._metrics_cache[cache_key] = score
-        return score
+        return self._get_cached_metric(
+            MetricNames.SILHOUETTE_SCORE,
+            use_cache=use_cache,
+            calculator=calculate,
+        )
 
     def get_inertia(self) -> float:
-        """获取 inertia（聚类模型专用）。"""
+        """获取 inertia。"""
         self._check_is_fitted()
         self._check_metric_support(MetricNames.INERTIA)
         if hasattr(self.model, "inertia_"):
@@ -249,58 +307,44 @@ class BaseModel(ABC):
         raise NotImplementedError("当前模型不支持 inertia 指标")
 
     def get_r2_score(self, y_true: np.ndarray, y_pred: np.ndarray) -> float:
-        """获取 R2 分数（回归模型专用）。"""
-        self._check_is_fitted()
-        self._check_metric_support(MetricNames.R2_SCORE)
-        y_true = np.asarray(y_true).ravel()
-        y_pred = np.asarray(y_pred).ravel()
-        self._check_target_shape(y_true, y_pred)
-
-        from sklearn.metrics import r2_score
-
-        return float(r2_score(y_true, y_pred))
+        """获取 R2 分数。"""
+        return self._compute_supervised_metric(
+            MetricNames.R2_SCORE,
+            r2_score,
+            y_true,
+            y_pred,
+        )
 
     def get_mse(self, y_true: np.ndarray, y_pred: np.ndarray) -> float:
-        """获取均方误差（回归模型专用）。"""
-        self._check_is_fitted()
-        self._check_metric_support(MetricNames.MSE)
-        y_true = np.asarray(y_true).ravel()
-        y_pred = np.asarray(y_pred).ravel()
-        self._check_target_shape(y_true, y_pred)
-
-        from sklearn.metrics import mean_squared_error
-
-        return float(mean_squared_error(y_true, y_pred))
+        """获取均方误差。"""
+        return self._compute_supervised_metric(
+            MetricNames.MSE,
+            mean_squared_error,
+            y_true,
+            y_pred,
+        )
 
     def get_mae(self, y_true: np.ndarray, y_pred: np.ndarray) -> float:
-        """获取平均绝对误差（回归模型专用）。"""
-        self._check_is_fitted()
-        self._check_metric_support(MetricNames.MAE)
-        y_true = np.asarray(y_true).ravel()
-        y_pred = np.asarray(y_pred).ravel()
-        self._check_target_shape(y_true, y_pred)
-
-        from sklearn.metrics import mean_absolute_error
-
-        return float(mean_absolute_error(y_true, y_pred))
+        """获取平均绝对误差。"""
+        return self._compute_supervised_metric(
+            MetricNames.MAE,
+            mean_absolute_error,
+            y_true,
+            y_pred,
+        )
 
     def get_rmse(self, y_true: np.ndarray, y_pred: np.ndarray) -> float:
-        """获取均方根误差（回归模型专用）。"""
-        self._check_is_fitted()
-        self._check_metric_support(MetricNames.RMSE)
+        """获取均方根误差。"""
         return float(np.sqrt(self.get_mse(y_true, y_pred)))
 
     def get_accuracy(self, y_true: np.ndarray, y_pred: np.ndarray) -> float:
-        """获取准确率（分类模型专用）。"""
-        self._check_is_fitted()
-        self._check_metric_support(MetricNames.ACCURACY)
-        y_true = np.asarray(y_true).ravel()
-        y_pred = np.asarray(y_pred).ravel()
-        self._check_target_shape(y_true, y_pred)
-
-        from sklearn.metrics import accuracy_score
-
-        return float(accuracy_score(y_true, y_pred))
+        """获取准确率。"""
+        return self._compute_supervised_metric(
+            MetricNames.ACCURACY,
+            accuracy_score,
+            y_true,
+            y_pred,
+        )
 
     def get_precision(
         self,
@@ -309,17 +353,14 @@ class BaseModel(ABC):
         average: str = "binary",
         zero_division: Union[int, float, str] = 0,
     ) -> float:
-        """获取精确率（分类模型专用）。"""
-        self._check_is_fitted()
-        self._check_metric_support(MetricNames.PRECISION)
-        y_true = np.asarray(y_true).ravel()
-        y_pred = np.asarray(y_pred).ravel()
-        self._check_target_shape(y_true, y_pred)
-
-        from sklearn.metrics import precision_score
-
-        return float(
-            precision_score(y_true, y_pred, average=average, zero_division=zero_division)
+        """获取精确率。"""
+        return self._compute_supervised_metric(
+            MetricNames.PRECISION,
+            precision_score,
+            y_true,
+            y_pred,
+            average=average,
+            zero_division=zero_division,
         )
 
     def get_recall(
@@ -329,17 +370,14 @@ class BaseModel(ABC):
         average: str = "binary",
         zero_division: Union[int, float, str] = 0,
     ) -> float:
-        """获取召回率（分类模型专用）。"""
-        self._check_is_fitted()
-        self._check_metric_support(MetricNames.RECALL)
-        y_true = np.asarray(y_true).ravel()
-        y_pred = np.asarray(y_pred).ravel()
-        self._check_target_shape(y_true, y_pred)
-
-        from sklearn.metrics import recall_score
-
-        return float(
-            recall_score(y_true, y_pred, average=average, zero_division=zero_division)
+        """获取召回率。"""
+        return self._compute_supervised_metric(
+            MetricNames.RECALL,
+            recall_score,
+            y_true,
+            y_pred,
+            average=average,
+            zero_division=zero_division,
         )
 
     def get_f1_score(
@@ -349,26 +387,25 @@ class BaseModel(ABC):
         average: str = "binary",
         zero_division: Union[int, float, str] = 0,
     ) -> float:
-        """获取 F1 分数（分类模型专用）。"""
-        self._check_is_fitted()
-        self._check_metric_support(MetricNames.F1_SCORE)
-        y_true = np.asarray(y_true).ravel()
-        y_pred = np.asarray(y_pred).ravel()
-        self._check_target_shape(y_true, y_pred)
-
-        from sklearn.metrics import f1_score
-
-        return float(f1_score(y_true, y_pred, average=average, zero_division=zero_division))
+        """获取 F1 分数。"""
+        return self._compute_supervised_metric(
+            MetricNames.F1_SCORE,
+            f1_score,
+            y_true,
+            y_pred,
+            average=average,
+            zero_division=zero_division,
+        )
 
     def get_explained_variance(self) -> float:
-        """获取解释方差占比（降维模型专用）。"""
+        """获取解释方差占比。"""
         self._check_is_fitted()
         self._check_metric_support(MetricNames.EXPLAINED_VARIANCE)
         if hasattr(self.model, "explained_variance_ratio_"):
             return float(np.asarray(self.model.explained_variance_ratio_).sum())
         raise NotImplementedError("当前模型不支持 explained_variance 指标")
 
-    def get_all_metrics(self, **kwargs) -> dict[str, float]:
+    def get_all_metrics(self, **kwargs: Any) -> dict[str, float]:
         """
         批量获取当前模型支持的指标。
 
@@ -386,37 +423,47 @@ class BaseModel(ABC):
         zero_division = kwargs.get("zero_division", 0)
 
         if self.model_type == ModelType.CLUSTER:
-            try:
-                metrics[MetricNames.SILHOUETTE_SCORE] = self.get_silhouette_score(
-                    data=kwargs.get("data"),
-                    labels=kwargs.get("labels"),
-                )
-            except (ValueError, NotImplementedError):
-                pass
-            try:
-                metrics[MetricNames.INERTIA] = self.get_inertia()
-            except (ValueError, NotImplementedError):
-                pass
+            for metric_name, getter in (
+                (
+                    MetricNames.SILHOUETTE_SCORE,
+                    lambda: self.get_silhouette_score(
+                        data=kwargs.get("data"),
+                        labels=kwargs.get("labels"),
+                    ),
+                ),
+                (MetricNames.INERTIA, self.get_inertia),
+            ):
+                try:
+                    metrics[metric_name] = getter()
+                except (ValueError, NotImplementedError):
+                    continue
 
-        elif self.model_type == ModelType.REGRESSION:
-            if y_true is not None and y_pred is not None:
-                metrics[MetricNames.R2_SCORE] = self.get_r2_score(y_true, y_pred)
-                metrics[MetricNames.MSE] = self.get_mse(y_true, y_pred)
-                metrics[MetricNames.MAE] = self.get_mae(y_true, y_pred)
-                metrics[MetricNames.RMSE] = self.get_rmse(y_true, y_pred)
+        elif self.model_type == ModelType.REGRESSION and y_true is not None and y_pred is not None:
+            metrics[MetricNames.R2_SCORE] = self.get_r2_score(y_true, y_pred)
+            metrics[MetricNames.MSE] = self.get_mse(y_true, y_pred)
+            metrics[MetricNames.MAE] = self.get_mae(y_true, y_pred)
+            metrics[MetricNames.RMSE] = self.get_rmse(y_true, y_pred)
 
-        elif self.model_type == ModelType.CLASSIFICATION:
-            if y_true is not None and y_pred is not None:
-                metrics[MetricNames.ACCURACY] = self.get_accuracy(y_true, y_pred)
-                metrics[MetricNames.PRECISION] = self.get_precision(
-                    y_true, y_pred, average=average, zero_division=zero_division
-                )
-                metrics[MetricNames.RECALL] = self.get_recall(
-                    y_true, y_pred, average=average, zero_division=zero_division
-                )
-                metrics[MetricNames.F1_SCORE] = self.get_f1_score(
-                    y_true, y_pred, average=average, zero_division=zero_division
-                )
+        elif self.model_type == ModelType.CLASSIFICATION and y_true is not None and y_pred is not None:
+            metrics[MetricNames.ACCURACY] = self.get_accuracy(y_true, y_pred)
+            metrics[MetricNames.PRECISION] = self.get_precision(
+                y_true,
+                y_pred,
+                average=average,
+                zero_division=zero_division,
+            )
+            metrics[MetricNames.RECALL] = self.get_recall(
+                y_true,
+                y_pred,
+                average=average,
+                zero_division=zero_division,
+            )
+            metrics[MetricNames.F1_SCORE] = self.get_f1_score(
+                y_true,
+                y_pred,
+                average=average,
+                zero_division=zero_division,
+            )
 
         elif self.model_type == ModelType.DIMENSIONALITY_REDUCTION:
             try:
@@ -430,7 +477,7 @@ class BaseModel(ABC):
         """
         获取子类扩展状态。
 
-        子类可重写该方法，返回可 picklable 的状态字典。
+        子类可重写该方法，返回可 pickle 的状态字典。
         """
         return {}
 
@@ -456,8 +503,8 @@ class BaseModel(ABC):
             "model_type": self.model_type.value,
             "extra_state": self._get_serializable_state(),
         }
-        with path.open("wb") as f:
-            pickle.dump(payload, f)
+        with path.open("wb") as file:
+            pickle.dump(payload, file)
 
     def load_model(self, filepath: Union[str, Path]) -> "BaseModel":
         """从文件加载模型。"""
@@ -465,8 +512,8 @@ class BaseModel(ABC):
         if not path.exists():
             raise FileNotFoundError(f"模型文件不存在: {path}")
 
-        with path.open("rb") as f:
-            payload = pickle.load(f)
+        with path.open("rb") as file:
+            payload = pickle.load(file)
 
         self.model = payload.get("model")
         self.random_state = int(payload.get("random_state", self.random_state))
@@ -482,7 +529,7 @@ class BaseModel(ABC):
 
     def _get_supported_metrics(self) -> list[str]:
         """返回当前模型支持的指标列表。"""
-        return list(_SUPPORTED_METRICS_BY_MODEL.get(self.model_type, []))
+        return list(_SUPPORTED_METRICS_BY_MODEL.get(self.model_type, ()))
 
     def get_model_info(self) -> dict[str, Any]:
         """获取模型概览信息。"""
@@ -508,4 +555,237 @@ class BaseModel(ABC):
         )
 
 
-__all__ = ["BaseModel", "MetricNames", "ModelType"]
+class TabularData:
+    """
+    通用表格数据容器类。
+
+    适用于分类、回归、多模态、关联分析、建模等结构化数据场景。
+    """
+
+    def __init__(
+        self,
+        df: Optional[pd.DataFrame] = None,
+        filepath: Optional[Union[str, Path]] = None,
+    ):
+        self.df: Optional[pd.DataFrame] = None
+        self.filepath: Optional[Path] = None
+
+        self.X: Optional[np.ndarray] = None
+        self.y: Optional[np.ndarray] = None
+        self.feature_names: list[str] = []
+
+        self.X_train: Optional[np.ndarray] = None
+        self.X_val: Optional[np.ndarray] = None
+        self.X_test: Optional[np.ndarray] = None
+        self.y_train: Optional[np.ndarray] = None
+        self.y_val: Optional[np.ndarray] = None
+        self.y_test: Optional[np.ndarray] = None
+
+        self.scaler: Optional[Union[StandardScaler, MinMaxScaler]] = None
+        self.X_train_scaled: Optional[np.ndarray] = None
+        self.X_val_scaled: Optional[np.ndarray] = None
+        self.X_test_scaled: Optional[np.ndarray] = None
+
+        if df is not None:
+            self.df = df.copy()
+        elif filepath is not None:
+            self.load(filepath)
+
+    def _require_dataframe(self) -> pd.DataFrame:
+        """确保原始数据已经加载。"""
+        if self.df is None:
+            raise ValueError("尚未加载数据，请先传入 df 或调用 load()")
+        return self.df
+
+    def _require_features(self) -> None:
+        """确保已经指定特征。"""
+        if self.X is None:
+            raise ValueError("尚未指定特征列，请先调用 set_Xy()")
+
+    def _require_split(self) -> None:
+        """确保已经完成数据切分。"""
+        if self.X_train is None:
+            raise ValueError("尚未完成数据切分，请先调用 split()")
+
+    def _reset_split_cache(self) -> None:
+        """当原始特征变化时，清空旧的切分和缩放结果。"""
+        self.X_train = None
+        self.X_val = None
+        self.X_test = None
+        self.y_train = None
+        self.y_val = None
+        self.y_test = None
+        self._reset_scaled_cache()
+
+    def _reset_scaled_cache(self) -> None:
+        """清空缩放器与缩放结果。"""
+        self.scaler = None
+        self.X_train_scaled = None
+        self.X_val_scaled = None
+        self.X_test_scaled = None
+
+    @staticmethod
+    def _normalize_feature_names(X_cols: Union[str, Sequence[str]]) -> list[str]:
+        """统一特征列参数格式。"""
+        if isinstance(X_cols, str):
+            return [X_cols]
+        return list(X_cols)
+
+    @staticmethod
+    def _resolve_stratify_labels(
+        y: Optional[np.ndarray],
+        stratify: bool,
+    ) -> Optional[np.ndarray]:
+        """
+        解析是否启用分层抽样。
+
+        对连续型目标值自动回退为普通随机划分，避免回归场景误用分层采样。
+        """
+        if y is None or stratify is False:
+            return None
+
+        labels = np.asarray(y).ravel()
+        unique_labels, counts = np.unique(labels, return_counts=True)
+        if unique_labels.size <= 1 or counts.min() < 2:
+            return None
+
+        is_float = np.issubdtype(labels.dtype, np.floating)
+        if is_float and unique_labels.size > min(labels.size // 5 + 1, 20):
+            return None
+
+        return labels
+
+    def load(self, filepath: Union[str, Path]) -> "TabularData":
+        """自动加载 csv 或 Excel。"""
+        path = Path(filepath)
+        suffix = path.suffix.lower()
+        if suffix == ".csv":
+            self.df = pd.read_csv(path)
+        elif suffix in {".xlsx", ".xls"}:
+            self.df = pd.read_excel(path)
+        else:
+            raise ValueError(f"暂不支持的文件格式: {suffix}")
+
+        self.filepath = path
+        self.X = None
+        self.y = None
+        self.feature_names = []
+        self._reset_split_cache()
+        return self
+
+    def set_Xy(
+        self,
+        X_cols: Union[str, Sequence[str]],
+        y_col: Optional[str] = None,
+    ) -> "TabularData":
+        """手动指定特征列和标签列。"""
+        df = self._require_dataframe()
+        self.feature_names = self._normalize_feature_names(X_cols)
+        self.X = df.loc[:, self.feature_names].to_numpy()
+        self.y = None if y_col is None else df.loc[:, y_col].to_numpy()
+        self._reset_split_cache()
+        return self
+
+    def split(
+        self,
+        test_size: float = 0.2,
+        val_size: float = 0.1,
+        random_state: int = 42,
+        stratify: bool = True,
+    ) -> "TabularData":
+        """划分训练集、验证集、测试集。"""
+        self._require_features()
+        if not 0 < test_size < 1:
+            raise ValueError("test_size 必须在 0 到 1 之间")
+        if not 0 <= val_size < 1:
+            raise ValueError("val_size 必须在 0 到 1 之间")
+        if test_size + val_size >= 1:
+            raise ValueError("test_size 与 val_size 之和必须小于 1")
+
+        stratify_labels = self._resolve_stratify_labels(self.y, stratify)
+        train_val_ratio = val_size / (1 - test_size) if val_size > 0 else 0.0
+
+        if self.y is None:
+            X_train_val, X_test = train_test_split(
+                self.X,
+                test_size=test_size,
+                random_state=random_state,
+            )
+            if val_size > 0:
+                X_train, X_val = train_test_split(
+                    X_train_val,
+                    test_size=train_val_ratio,
+                    random_state=random_state,
+                )
+            else:
+                X_train, X_val = X_train_val, None
+
+            self.X_train, self.X_val, self.X_test = X_train, X_val, X_test
+            self.y_train, self.y_val, self.y_test = None, None, None
+            self._reset_scaled_cache()
+            return self
+
+        X_train_val, X_test, y_train_val, y_test = train_test_split(
+            self.X,
+            self.y,
+            test_size=test_size,
+            random_state=random_state,
+            stratify=stratify_labels,
+        )
+
+        if val_size > 0:
+            val_stratify = (
+                self._resolve_stratify_labels(y_train_val, True)
+                if stratify_labels is not None
+                else None
+            )
+            X_train, X_val, y_train, y_val = train_test_split(
+                X_train_val,
+                y_train_val,
+                test_size=train_val_ratio,
+                random_state=random_state,
+                stratify=val_stratify,
+            )
+        else:
+            X_train, X_val = X_train_val, None
+            y_train, y_val = y_train_val, None
+
+        self.X_train, self.X_val, self.X_test = X_train, X_val, X_test
+        self.y_train, self.y_val, self.y_test = y_train, y_val, y_test
+        self._reset_scaled_cache()
+        return self
+
+    def scale(self, method: str = "standard") -> "TabularData":
+        """对切分后的特征执行标准化或归一化。"""
+        self._require_split()
+        if method not in _SCALER_MAPPING:
+            raise ValueError("method 仅支持 'standard' 或 'minmax'")
+
+        self.scaler = _SCALER_MAPPING[method]()
+        self.X_train_scaled = self.scaler.fit_transform(self.X_train)
+        self.X_val_scaled = (
+            None if self.X_val is None else self.scaler.transform(self.X_val)
+        )
+        self.X_test_scaled = self.scaler.transform(self.X_test)
+        return self
+
+    def get_train(self, scaled: bool = True) -> tuple[Optional[np.ndarray], Optional[np.ndarray]]:
+        """获取训练集。"""
+        features = self.X_train_scaled if scaled and self.X_train_scaled is not None else self.X_train
+        return features, self.y_train
+
+    def get_val(self, scaled: bool = True) -> tuple[Optional[np.ndarray], Optional[np.ndarray]]:
+        """获取验证集。"""
+        features = self.X_val_scaled if scaled and self.X_val_scaled is not None else self.X_val
+        return features, self.y_val
+
+    def get_test(self, scaled: bool = True) -> tuple[Optional[np.ndarray], Optional[np.ndarray]]:
+        """获取测试集。"""
+        features = self.X_test_scaled if scaled and self.X_test_scaled is not None else self.X_test
+        return features, self.y_test
+
+    def __len__(self) -> int:
+        return 0 if self.df is None else len(self.df)
+
+
+__all__ = ["BaseModel", "MetricNames", "ModelType", "TabularData"]

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from typing import Any, Callable
-from ljp_page._modules.logger import DEFAULT_LEVEL_ALIASES
+from ljp_page._core.logger import DEFAULT_LEVEL_ALIASES
 
 class Ljp_BaseClass:
     def __init__(self, logger: Any = None):

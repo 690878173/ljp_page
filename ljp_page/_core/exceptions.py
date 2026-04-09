@@ -1,25 +1,43 @@
-# 04-01-20-05-00
-"""项目全局异常定义。"""
-
 from __future__ import annotations
 
 from typing import Any
 
 
 class LjpBaseException(Exception):
-    """项目全局唯一自定义异常基类。"""
+    """项目全局唯一自定义异常基类（增强版）"""
 
-    def __init__(self, message: str, f: Any = None, e: Exception | None = None) -> None:
-        self.e = e
-        if f is not None:
-            message = f"({getattr(f, '__name__', str(f))}): {message}"
+    def __init__(
+        self,
+        message: str,
+        *,
+        f: Any = None,
+        e: Exception | None = None,
+        context: dict | None = None,
+    ) -> None:
+        self.e = e  # 原始异常
+        self.context = context or {}
+
+        # 结构化存函数名，而不是只拼字符串
+        self.func = getattr(f, "__name__", str(f)) if f else None
+
+        # 构造基础 message（保持你原有风格）
+        if self.func:
+            message = f"({self.func}): {message}"
+
         super().__init__(message)
 
     def __str__(self) -> str:
         base = super().__str__()
-        if self.e is None:
-            return base
-        return f"{base}==>{self.e}"
+
+        # 只在有 context 时追加（避免污染普通异常）
+        if self.context:
+            ctx_str = ", ".join(f"{k}={v}" for k, v in self.context.items())
+            base = f"{base} | [{ctx_str}]"
+
+        if self.e:
+            return f"{base} ==> {self.e}"
+
+        return base
 
 
 class No(LjpBaseException):
@@ -60,26 +78,6 @@ class Notfound(LjpBaseException):
         msg = super().__str__()
         if self.resource is not None:
             msg += f" (资源: {self.resource})"
-        return msg
-
-
-class NetworkError(LjpBaseException):
-    """网络相关错误（旧版本，建议使用 NetworkException）。"""
-
-    def __init__(
-        self,
-        message: str = "网络连接错误",
-        url: str | None = None,
-        *args: Any,
-        **kwargs: Any,
-    ) -> None:
-        self.url = url
-        super().__init__(message, *args, **kwargs)
-
-    def __str__(self) -> str:
-        msg = super().__str__()
-        if self.url is not None:
-            msg += f" (URL: {self.url})"
         return msg
 
 
@@ -146,7 +144,7 @@ class CaptchaException(LjpBaseException):
 
 
 class NetworkException(LjpBaseException):
-    """网络连接异常（新版本）。"""
+    """网络连接异常。"""
 
     def __init__(
         self,
@@ -362,7 +360,6 @@ ALL_EXCEPTIONS = (
     Yes,
     ConfigError,
     Notfound,
-    NetworkError,
     ParseError,
     MeetCheckError,
     CaptchaException,
@@ -387,7 +384,6 @@ __all__ = [
     "LjpRequestException",
     "MaxRetriesException",
     "MeetCheckError",
-    "NetworkError",
     "NetworkException",
     "No",
     "Notfound",

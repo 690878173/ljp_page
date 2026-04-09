@@ -44,8 +44,7 @@ class Logger:
         # 6. 根据配置添加 handler
         self._setup_handlers()
 
-        # 兼容原来的 self.logger 调用
-        self.logger = self
+        self.logger = loguru_logger
 
     @staticmethod
     def _resolve_log_file_path(log_file_path: str | None) -> Path:
@@ -93,7 +92,11 @@ class Logger:
         level_num = record["level"].no
         level_name = self.level_names.get(level_num, f"L{level_num}")
         message = record["message"]
-        return f"{now_str} | L{level_num:02d}({level_name}) | {message}\n"
+        extra = record.get("extra", {})
+        ctx_str = ""
+        if extra:
+            ctx_str = " | " + " ".join(f"{k}={v}" for k, v in extra.items())
+        return f"{now_str} | L{level_num:02d}({level_name}) | {message}{ctx_str}\n"
 
     def _setup_handlers(self) -> None:
         """（重新）设置 loguru 的 handler（控制台 + 文件）"""
@@ -148,6 +151,9 @@ class Logger:
                 pass
             # 重新应用 handler
             self._setup_handlers()
+
+    def bind(self, **kwargs):
+        return loguru_logger.bind(**kwargs)
 
     def log(self, level: int | str, message: str) -> None:
         """通用日志输出方法"""

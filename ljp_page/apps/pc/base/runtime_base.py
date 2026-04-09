@@ -9,7 +9,7 @@ import threading
 from typing import Any, Dict, List, Optional
 
 from ljp_page.utils.file import Directory, FileHandle
-from ljp_page._modules.logger import Logger
+from ljp_page._core.logger import Logger
 from ljp_page._modules.request import Requests
 from ljp_page._core.base.Ljp_base_class import Ljp_BaseClass
 
