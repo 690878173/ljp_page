@@ -9,7 +9,7 @@ import re
 from typing import Any
 
 from ljp_page._core.base.Ljp_base_class import Ljp_BaseClass
-from ljp_page._core.logger import Logger
+from ljp_page._modules.logger import Logger
 
 from .models import P2Result, P3Result
 

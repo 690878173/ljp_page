@@ -8,7 +8,7 @@ import inspect
 from typing import Any
 
 from ljp_page._core.exceptions import MeetCheckError, No, Notfound
-from ljp_page._core.logger import Logger
+from ljp_page._modules.logger import Logger
 
 from .manager_base import BaseManager
 from .runtime_base import BasePc

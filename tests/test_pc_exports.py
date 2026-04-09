@@ -1,12 +1,11 @@
 # 04-01-20-58-00
 import json
 
-from ljp_page.out.pc import Mode, PcConfig
-from ljp_page._core.config import RetryConfig
-from ljp_page._core.config import TimeoutConfig
-from ljp_page.out.pc import Xs
-from ljp_page.out.request import RequestConfig,LjpConfig
-from ljp_page.out.logger import LogConfig
+from ljp_page.pc import Mode, PcConfig
+from ljp_page.config import RetryConfig,TimeoutConfig,ProxyConfig,PoolConfig
+from ljp_page.pc import Xs
+from ljp_page.request import RequestConfig,LjpConfig
+from ljp_page.logger import LogConfig
 
 
 class Ts(Xs):
@@ -47,8 +46,9 @@ def _build_pc_config() -> PcConfig:
         save_path=r"J:\pppppppppppppppppc\books",
         p2_url="https://apibi.cc/api/book?id={}",
         mode=Mode.MODE1,
-        id_ls=[i for i in range(1010, 1011)],
+        id_ls=[i for i in range(1010, 1031)],
         ljp_config=req_cfg,
+        max_workers=10
     )
 
 

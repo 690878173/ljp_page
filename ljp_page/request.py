@@ -21,7 +21,7 @@ from ljp_page._modules.request.Config import (
     RequestConfig,
     LjpConfig
 )
-from ljp_page._core.logger import LogConfig
+from ljp_page._modules.logger import LogConfig
 
 __all__ = [
     "AsyncSession",

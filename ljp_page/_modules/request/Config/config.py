@@ -9,7 +9,7 @@ from threading import RLock
 from typing import Any, Mapping
 
 from ljp_page._core.config import TimeoutConfig, RetryConfig, PoolConfig, ProxyConfig
-from ljp_page._core.logger import LogConfig
+from ljp_page._modules.logger import LogConfig
 
 DEFAULT_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -64,6 +64,7 @@ class LjpConfig:
     pool: PoolConfig = field(default_factory=PoolConfig)
     proxy: ProxyConfig = field(default_factory=ProxyConfig)
     log: LogConfig = field(default_factory=LogConfig)
+    middleware: MiddlewareConfig = field(default_factory=MiddlewareConfig)
     extra: dict[str, Any] = field(default_factory=dict)
 
 def _ensure_mapping(name: str, value: Any) -> Mapping[str, Any]:

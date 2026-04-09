@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Optional
 
 from ljp_page._core.exceptions import MeetCheckError
-from ljp_page._core.logger import Logger
+from ljp_page._modules.logger import Logger
 
 from ..base import BasePc
 from .manager import BaseVideoManager, VideoManager
