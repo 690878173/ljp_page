@@ -6,7 +6,7 @@ from __future__ import annotations
 from abc import ABC
 from typing import Any, Awaitable, Callable
 
-from ljp_page._modules.request.Config.models import LjpRequestException, LjpResponse, RequestContext
+from ljp_page._modules.request.other.Config.models import  LjpResponse, RequestContext
 
 SyncNextHandler = Callable[[RequestContext], LjpResponse]
 AsyncNextHandler = Callable[[RequestContext], Awaitable[LjpResponse]]
@@ -49,7 +49,7 @@ class SyncMiddleware(Ljp_MiddlewareBase):
     def on_error(
         self,
         context: RequestContext,
-        error: Exception | LjpRequestException,
+        error: Exception ,
         session: Any,
     ) -> None:
         return None
@@ -86,7 +86,7 @@ class AsyncMiddleware(Ljp_MiddlewareBase):
     async def on_error(
         self,
         context: RequestContext,
-        error: Exception | LjpRequestException,
+        error: Exception,
         session: Any,
     ) -> None:
         return None

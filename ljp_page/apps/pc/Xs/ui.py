@@ -7,7 +7,7 @@ import ast
 import tkinter as tk
 from tkinter import messagebox
 
-from ljp_page._modules.logger import Logger
+from ljp_page._core.logger import Logger
 
 from .spider import Xs
 

@@ -37,7 +37,7 @@ class BaseVideoManager(Ljp_BaseClass):
 
 
 class VideoManager(BaseVideoManager):
-    """默认影视下载实现：解析 m3u8、并发下载 ts、ffmpeg 合并。"""
+    """默认影视下载实现：解析 m3u8、并发下载 a_ts、ffmpeg 合并。"""
 
     async def download_video(self, session: Any, video_info: VideoInfo) -> None:
         semaphore = asyncio.Semaphore(max(1, self.config.episode_concurrency))
@@ -141,9 +141,9 @@ class VideoManager(BaseVideoManager):
         return False
 
     async def _merge_segments(self, paths: EpisodePaths) -> Path:
-        segment_files = sorted(paths.segment_dir.glob("*.ts"), key=lambda item: item.name)
+        segment_files = sorted(paths.segment_dir.glob("*.a_ts"), key=lambda item: item.name)
         if not segment_files:
-            raise RuntimeError(f"no ts files found: {paths.segment_dir}")
+            raise RuntimeError(f"no a_ts files found: {paths.segment_dir}")
         return await self.merger.merge(segment_files, paths.filelist_file, paths.output_file)
 
 

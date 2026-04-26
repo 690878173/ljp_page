@@ -7,8 +7,9 @@ import asyncio
 import inspect
 from typing import Any
 
+
 from ljp_page._core.exceptions import MeetCheckError, No, Notfound
-from ljp_page._modules.logger import Logger
+from ljp_page._core.logger import Logger
 
 from .manager_base import BaseManager
 from .runtime_base import BasePc
@@ -33,13 +34,41 @@ class Pc(BasePc):
             pause_flag=pause_flag,
         )
         self.manager = self.get_manager()
+        self.meet_fanpa_lock = asyncio.Lock()
+        self.is_updating_cookies = False
         if self.manager is None:
             raise NotImplementedError("get_manager must return manager class")
 
+    async def _fp(self, res, session, url, *args, **kwargs):
+        async with self.meet_fanpa_lock:
+            # 只有【没在更新】的时候，才进去更新
+            if not self.is_updating_cookies:
+                # 立刻标记为更新中 → 其他并发全部进不来
+                self.is_updating_cookies = True
+
+                try:
+                    # 真正打开浏览器（只执行一次）
+                    await self.fp(res, session, url, *args, **kwargs)
+                finally:
+                    # 🔥 关键：更新完后，重置状态！
+                    # 下一次再触发反爬，还能再次执行！
+                    self.is_updating_cookies = False
+
+        return True
+
+
+
+    async def fp(self,res,session,url,*args,**kwargs)-> bool:
+        return False
     async def get(self, session: Any, url: str, *args: Any, **kwargs: Any) -> Any:
         self.debug(f"request url: {url}", self.get.__name__)
         kwargs.setdefault("return_type", "text")
-        return await self.req.async_get(session=session, url=url, *args, **kwargs)
+        res = await self.req.async_get(session=session, url=url, *args, **kwargs)
+        ic = await self._fp(res,session,url,*args,**kwargs)
+        if ic:
+            res = await self.req.async_get(session=session, url=url, *args, **kwargs)
+        return res
+
 
     def parse_p1(self, res_html: str, url: str) -> BasePc.P1Result:
         raise NotImplementedError("parse_p1 is required")
@@ -65,15 +94,13 @@ class Pc(BasePc):
             normalized.append((str(chapter_title or ""), str(chapter_url)))
         return normalized
 
-    async def _process_page(self, page_id: Any) -> list[Any]:
+    async def _process_p1(self, page_id: Any) -> list[Any]:
         if not self.config.p1_url:
             raise ValueError("mode2 requires p1_url")
-
         page_url = self.config.p1_url.format(page_id)
         html_str = await self.get(session=self.session, url=page_url)
         if not html_str:
             return []
-
         result = await self.parse_html(self.parse_p1, html_str, page_url)
         if not isinstance(result, self.P1Result):
             raise TypeError("parse_p1 must return P1Result")

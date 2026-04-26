@@ -1,107 +1,52 @@
-import os
-import shutil
-import subprocess
-from pathlib import Path
+from ljp_page.pc import Dybz,PcConfig
+from ljp_page._modules.request.other.Config import LjpConfig,RequestConfig
+import asyncio
+cookies = {'cf_clearance': 'VmMgwC5IwMxchE_BSkrYB74cz8qu5v7vs9W9nhgNgIE-1776890756-1.2.1.1-hr1XLNhs0jbq26UIZNsq39k5DAFCLk7Snleatm3O4F6arq8oYv0GvoL9BG7JR1C1G7flSPY1g1NFu6u3SSct2fExNnG90Cj2lUdploFPw.1vFsMsyWidDpgb2aozDcv42J.5Iv5HNPr8mpdD0wH4b2CDwHsRTcgBfbMfnmrT2hFx8SCf_mCOnw7xIXS0f4Ifb53w_uiSigKsmCIP4V7udyPhDqJ.Cx0WxvRpUDLn7CnKZjbkZ1vGY8m3OSAFdHF4NgjY7V_tZ01II5okU5UwHrfJHvzWXef_q0FqWdHY88tRk4wKcBt1pGDx6bDmoRCAM20SshqKJarAoTqHnQOFZw'}
 
-# 👉 改成你的7z路径（一般就是这个）
-SEVEN_ZIP = r"D:\d\app_up\7z\7-Zip\7z.exe"
+headers = {
+    'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+    'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
+    'pragma': 'no-cache',
+    'priority': 'u=0, i',
+    'referer': 'https://www.bz999999999.com/24/24099/?__cf_chl_tk=Zsca6d9Ov1UI27ER7UnjCvtJYRbNzxql39r_ODm0rmI-1776888995-1.0.1.1-BJiv89Aps92wwIhP7Z6y62OqwS9yWsOOMXURgrSeiGA',
+    'sec-ch-ua': '"Microsoft Edge";v="147", "Not.A/Brand";v="8", "Chromium";v="147"',
+    'sec-ch-ua-arch': '"x86"',
+    'sec-ch-ua-bitness': '"64"',
+    'sec-ch-ua-full-version': '"147.0.3912.72"',
+    'sec-ch-ua-full-version-list': '"Microsoft Edge";v="147.0.3912.72", "Not.A/Brand";v="8.0.0.0", "Chromium";v="147.0.7727.102"',
+    'sec-ch-ua-mobile': '?0',
+    'sec-ch-ua-model': '""',
+    'sec-ch-ua-platform': '"Windows"',
+    'sec-ch-ua-platform-version': '"15.0.0"',
+    'sec-fetch-dest': 'document',
+    'sec-fetch-mode': 'navigate',
+    'sec-fetch-site': 'same-origin',
+    'sec-fetch-user': '?1',
+    'upgrade-insecure-requests': '1',
+    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36 Edg/147.0.0.0',
+    # 'cookie': 'cf_clearance=tKBLtW75DpkcT2iPVPjLIy_zvtNyQWW6_sgG0bc8cQA-1776889003-1.2.1.1-0dvtPHMblPrwbDW6FZO_7lxAfYNUyRGTGyHbz2ZXHtnYfsrBLXRGi6wOpxJvzfehbOGAjsW4y0RgzrAn62p1ZZFcqRFRUm_pMB._giaMqprJGlK5KQI3kkPajXGHOrB5lW0NBnmuoG8LCFOgqJmTYd.hihWBjZeZtCAhfkGiGR8PgEbvyEJtzVtYoFZc67P8ciC8mK6287t491XSflBNbqv_r0vxIv.itR_WQ0cqmuwJf4_XPSOiBjf2dkufV2PSe4tFcU7oIWsAV1V6xXg6vnVmdoIzqtQnARPiDTmSUsLLgImIMDONtDvVfzPE1JD28sgcpMp19vWKFcvQHMmBVg',
+}
+async def main():
 
+    from ljp_page.edge.pydoll import cf
+    base_url = 'https://www.bz999999999.com/'
+    ul,cookies,hd = await cf(base_url)
+    headers.update(hd)
+    cg = PcConfig(
+        base_url="https://www.bz999999999.com/",
+        save_path=r'J://xs',
+        p1_url='https://www.bz999999999.com/shuku/0-size-0-{}.html',
+        p2_url='https://www.bz999999999.com{}',
+        mode='mode2',
+        start_id=1,
+        end_id=5,
+        ljp_config=LjpConfig(request=RequestConfig(cookies=cookies,headers=headers)),
+                                                   )
 
-def is_archive(file_path: Path):
-    return file_path.suffix.lower() in [".zip", ".rar", ".7z", ".tar", ".gz"]
+    s = Dybz(cg)
+    s.run()
 
-
-def extract_archive(file_path: Path):
-    try:
-        subprocess.run(
-            [SEVEN_ZIP, "x", str(file_path), f"-o{file_path.parent}", "-y"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            check=True
-        )
-        print(f"[解压] {file_path}")
-        return True
-    except Exception as e:
-        print(f"[失败] {file_path} -> {e}")
-        return False
-
-
-def extract_all(root_dir: Path):
-    processed = set()
-    changed = True
-
-    while changed:
-        changed = False
-
-        for root, _, files in os.walk(root_dir):
-            for f in files:
-                file_path = Path(root) / f
-
-                if file_path in processed:
-                    continue
-
-                if is_archive(file_path):
-                    ok = extract_archive(file_path)
-                    processed.add(file_path)
-                    if ok:
-                        changed = True
-
-
-def get_unique_path(root_dir: Path, name: str):
-    target = root_dir / name
-    if not target.exists():
-        return target
-
-    stem = Path(name).stem
-    suffix = Path(name).suffix
-    i = 1
-
-    while True:
-        new = root_dir / f"{stem}_{i}{suffix}"
-        if not new.exists():
-            return new
-        i += 1
+asyncio.run(main())
 
 
-def collect_pptx(root_dir: Path):
-    count = 0
 
-    for root, _, files in os.walk(root_dir):
-        for f in files:
-            file_path = Path(root) / f
-
-            if file_path.suffix.lower() in [".pptx",'.ppt']:
-                if file_path.parent == root_dir:
-                    continue
-
-                target = get_unique_path(root_dir, f)
-
-                try:
-                    shutil.move(str(file_path), str(target))
-                    print(f"[移动] {file_path} -> {target}")
-                    count += 1
-                except Exception as e:
-                    print(f"[失败] {file_path} -> {e}")
-
-    print(f"\n共收集 {count} 个 PPTX 文件")
-
-
-def main():
-    folder = r'E:\BaiduNetdiskDownload\PPT模版分类'
-    root = Path(folder)
-
-    if not root.exists():
-        print("目录不存在")
-        return
-
-    print("\n=== 开始解压 ===")
-    extract_all(root)
-
-    print("\n=== 收集 PPTX ===")
-    collect_pptx(root)
-
-    print("\n完成 ✅")
-
-
-if __name__ == "__main__":
-    main()

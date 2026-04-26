@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ljp_page._modules.request.Config.models import LjpResponse, RequestContext
+from ljp_page._modules.request.other.Config.models import LjpResponse, RequestContext
 from .base import AsyncResponseMiddlewareBase, ResponseMiddlewareBase
 
 

@@ -6,8 +6,8 @@ from __future__ import annotations
 import asyncio
 import time
 
-from ljp_page._modules.request.Config.config import LjpConfig
-from ljp_page._modules.request.Config.models import LjpRequestException, LjpResponse, RequestContext
+from ljp_page._modules.request.other.Config import LjpConfig
+from ljp_page._modules.request.other.Config.models import  LjpResponse, RequestContext
 from ..base import AsyncMiddleware, Ljp_MiddlewareBase, SyncMiddleware
 
 
@@ -28,7 +28,7 @@ class RetryMiddlewareBase(Ljp_MiddlewareBase):
     def should_retry_exception(
         self,
         context: RequestContext,
-        error: LjpRequestException,
+        error: Exception,
     ) -> bool:
         category = str(getattr(error, "category", "unknown")).lower()
         if category in {item.lower() for item in self.config.retry.ignore_exceptions}:

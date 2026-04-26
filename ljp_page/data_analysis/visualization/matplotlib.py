@@ -15,10 +15,9 @@ from matplotlib.axes import Axes
 from matplotlib.colors import LinearSegmentedColormap, to_hex
 from matplotlib.figure import Figure
 
-try:
-    import seaborn as sns
-except ModuleNotFoundError:  # pragma: no cover - seaborn 缺失时走降级逻辑
-    sns = None
+
+import seaborn as sns
+
 
 
 Number = Union[int, float, np.number]

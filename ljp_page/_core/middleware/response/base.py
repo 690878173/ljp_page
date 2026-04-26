@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from ljp_page._modules.request.Config.models import LjpResponse, RequestContext
+from ljp_page._modules.request.other.Config.models import LjpResponse, RequestContext
 from ..base import Ljp_AsyncMiddleware, Ljp_SyncMiddleware
 
 

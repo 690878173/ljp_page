@@ -1,1 +1,1 @@
-from ljp_page._core.config import RetryConfig,TimeoutConfig,ProxyConfig,PoolConfig
+from ljp_page._core.config import RetryConfig,TimeoutConfig,ProxyConfig,SessionPoolConfig

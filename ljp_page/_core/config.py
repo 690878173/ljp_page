@@ -47,7 +47,7 @@ class RetryConfig:
 
 
 @dataclass
-class PoolConfig:
+class SessionPoolConfig:
     """连接池配置。"""
 
     max_connections: int = 100

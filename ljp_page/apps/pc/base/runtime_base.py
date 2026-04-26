@@ -9,7 +9,7 @@ import threading
 from typing import Any, Dict, List, Optional
 
 from ljp_page.utils.file import Directory, FileHandle
-from ljp_page._modules.logger import Logger
+from ljp_page._core.logger import Logger
 from ljp_page._modules.request import Requests
 from ljp_page._core.base.Ljp_base_class import Ljp_BaseClass
 
@@ -160,7 +160,6 @@ class BasePc(Ljp_BaseClass):
             await self.pause_event.wait()
             if self._should_exit():
                 break
-
             has_task = False
             try:
                 work_id = await asyncio.wait_for(
@@ -198,25 +197,24 @@ class BasePc(Ljp_BaseClass):
                     break
 
                 try:
-                    self.info(f"processing page: {page_id}")
-                    items = await self._process_page(page_id)
+                    self.info(f"p1处理: {page_id}")
+                    items = await self._process_p1(page_id)
                     for item in items:
                         await self.work_queue.put(item)
-                    self.info(f"page {page_id} generated {len(items)} tasks")
+                    self.info(f"page {page_id} 添加了{len(items)} 个任务")
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:
                     self.error(f"page process failed {page_id}: {exc}")
                 finally:
                     self.queue_1.task_done()
-
         tasks = [producer()] + [self._worker() for _ in range(self.config.max_workers)]
         await self.runtime.gather_inside(tasks, return_exceptions=True)
 
     async def _mode3(self) -> None:
         return None
 
-    async def _process_page(self, page_id: Any) -> List[Any]:
+    async def _process_p1(self, page_id: Any) -> List[Any]:
         raise NotImplementedError("_process_page must be implemented for mode2")
 
     async def _transfer_seed_to_work_queue(self) -> None:

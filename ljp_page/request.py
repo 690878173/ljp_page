@@ -1,7 +1,6 @@
 ﻿from ljp_page._modules.request import (
     AsyncSession,
     Html,
-    LjpRequestException,
     LjpResponse,
     RequestContext,
     Requests,
@@ -12,7 +11,7 @@ async_create_session,
 sync_create_session
 
 )
-from ljp_page._modules.request.Config import (
+from ljp_page._modules.request.other.Config import (
     get_request_config,
     merge_request_config,
     reset_request_config,
@@ -21,12 +20,11 @@ from ljp_page._modules.request.Config import (
     RequestConfig,
     LjpConfig
 )
-from ljp_page._modules.logger import LogConfig
+from ljp_page._core.logger import LogConfig
 
 __all__ = [
     "AsyncSession",
     "Html",
-    "LjpRequestException",
     "LjpResponse",
     "LogConfig",
     "RequestContext",

@@ -7,7 +7,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, List, Optional, Tuple
 
-from ljp_page._modules.request.Config.config import LjpConfig
+from ljp_page._modules.request.other.Config import LjpConfig
 
 
 class Mode:

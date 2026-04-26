@@ -14,7 +14,7 @@ from ljp_page._modules.request import Html
 
 from ..base import Pc
 from .ui import XsUI
-
+from ljp_page.edge.pydoll import cf
 
 class Dybz(XsUI):
     """示例站点解析实现。"""
@@ -37,14 +37,13 @@ class Dybz(XsUI):
     def parse_p1(self, res_html: str, url: str) -> Pc.P1Result:
         try:
             html = Html.drop_xml(res_html)
-            links = html.xpath("/html/body/div[3]/div[1]/div[2]/ul/li/div/a/@href")
+            links = html.xpath("//a[@class='name']/@href")
             items = [link for link in links if link]
 
             next_url = None
             next_btn = html.xpath("/html/body/div[3]/div[3]/div/a[5]/@href")
             if next_btn:
                 next_url = self._to_absolute(url, next_btn[0])
-
             return self.P1Result(items=items, next_url=next_url)
         except Exception:
             return self.P1Result(items=[], next_url=None)
@@ -83,11 +82,11 @@ class Dybz(XsUI):
         )
 
     def parse_p3(self, res_html: str, url: str) -> Pc.P3ParseResult:
-        if "Just a moment" in res_html:
-            self.pause()
-            self.warning("anti crawler page detected")
-            if winsound is not None:
-                winsound.Beep(1500, 100)
+        # if "Just a moment" in res_html:
+        #     self.pause()
+        #     self.warning("anti crawler page detected")
+        #     if winsound is not None:
+        #         winsound.Beep(1500, 100)
 
         html = Html.drop_xml(res_html)
 
@@ -96,13 +95,26 @@ class Dybz(XsUI):
         if title_nodes:
             title = self._clean_text(title_nodes[0])
 
-        content_nodes = html.xpath('//*[@id="nr1"]//text()')
+        content_nodes = html.xpath('//div[class="page-content font-large"]/p//text()')
         content = "".join(self._clean_text(i) for i in content_nodes if i)
 
-        next_rel = html.xpath('//*[@id="nr1"]/center/span[@class="curr"]/following-sibling::a[1]/@href')
+        next_rel = html.xpath('//center[@class="chapterPages"]/a[@class="curr"]/following-sibling::a[1]/@href')
         next_url = self._to_absolute(url, next_rel[0]) if next_rel else None
-
+        print(title)
+        print(content)
+        print(next_url)
         return self.P3ParseResult(title=title, content=content, next_url=next_url)
+
+    async def fp(self,res,session,url,*args,**kwargs):
+        l = ['Just a moment', '请稍候']
+        for i in l:
+            if i in res:
+                r_url,cookies,hd = await cf(url)
+                self.req.update_cookies(session,cookies)
+                session.headers.update(hd)
+                return True
+        return False
+
 
 
 __all__ = ["Dybz"]

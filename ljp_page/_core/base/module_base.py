@@ -13,7 +13,8 @@ class ModuleBase(Ljp_BaseClass):
     module_name = "module"
 
     def __init__(self, logger: Any = None) -> None:
-        super().__init__(logger=logger)
+        super().__init__()
+        self.logger = logger
 
     @classmethod
     def get_module_name(cls) -> str:

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from typing import Any, Callable
-from ljp_page._modules.logger import DEFAULT_LEVEL_ALIASES
+from ljp_page._core.logger import DEFAULT_LEVEL_ALIASES
 
 class Ljp_BaseClass:
-    def __init__(self, logger: Any = None):
+    def __init__(self):
+        pass
+
+    def set_logger(self, logger: Any) -> None:
         self.logger = logger
 
     def log(self, mes: str,level:int=5, f_name: str = "") -> None:
@@ -32,6 +35,9 @@ class Ljp_BaseClass:
 
     def info(self, message: Any, f_name: str = "") -> None:
         self._log(DEFAULT_LEVEL_ALIASES.get('info'), message, f_name)
+
+    def print(self,message: Any, f_name: str = "") -> None:
+        self._log(DEFAULT_LEVEL_ALIASES.get('print'), message, f_name)
 
     def warrior(self, message: Any, f_name: str = "") -> None:
         self._log(DEFAULT_LEVEL_ALIASES.get('warrior'), message, f_name)

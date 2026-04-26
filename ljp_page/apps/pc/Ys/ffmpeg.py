@@ -33,7 +33,7 @@ class FfmpegVideoMerger(BaseVideoMerger):
 
     async def merge(self, segment_files: Sequence[Path], filelist_path: Path, output_file: Path) -> Path:
         if not segment_files:
-            raise ValueError("no ts files to merge")
+            raise ValueError("no a_ts files to merge")
 
         lines = [f"file '{item.name}'" for item in segment_files]
         filelist_path.write_text("\n".join(lines), encoding="utf-8")

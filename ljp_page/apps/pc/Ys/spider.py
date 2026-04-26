@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Optional
 
 from ljp_page._core.exceptions import MeetCheckError
-from ljp_page._modules.logger import Logger
+from ljp_page._core.logger import Logger
 
 from ..base import BasePc
 from .manager import BaseVideoManager, VideoManager
@@ -61,7 +61,7 @@ class VideoSpiderBase(BasePc, ABC):
             raise TypeError("parse_video_info must return VideoInfo")
         return parsed
 
-    async def _process_page(self, page_id: Any) -> list[Any]:
+    async def _process_p1(self, page_id: Any) -> list[Any]:
         if not self.config.page_url:
             raise ValueError("ys mode2 requires page_url")
         page_url = self.config.page_url.format(page_id)
