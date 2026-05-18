@@ -1,14 +1,60 @@
-﻿
-from __future__ import annotations
-
-from .config import DEFAULT_LEVEL_ALIASES, DEFAULT_LEVEL_NAMES
-from .config import LogConfig
+﻿from __future__ import annotations
 import sys
 from datetime import datetime
 from pathlib import Path
 from threading import RLock
-from typing import Iterable, Dict, Any
+from typing import Iterable, Dict, Any, cast, Callable
+
 from loguru import logger as loguru_logger
+
+_loguru_filter_type = str | Callable[[dict[str, object]], bool] | None
+_loguru_formatter_type = str | Callable[[dict[str, Any]], str]
+from dataclasses import dataclass, field
+from typing import Any, Iterable, Mapping
+
+DEFAULT_LEVEL_NAMES: dict[int, str] = {
+    1: "debug",
+    2: "trace",
+    3: "verbose",
+    4: "notice",
+    5: "info",
+    6: "print",
+    7: "event",
+    8: "check",
+    9: "risk",
+    10: "warning",
+    11: "warn_plus",
+    12: "alert",
+    13: "issue",
+    14: "error_minor",
+    15: "error",
+    16: "fatal",
+    17: "panic",
+    18: "security",
+    19: "critical",
+    20: "off",
+}
+
+DEFAULT_LEVEL_ALIASES: dict[str, int] = {
+    value:name
+    for name, value in DEFAULT_LEVEL_NAMES.items()
+}
+
+@dataclass
+class LogConfig:
+    """日志策略配置。"""
+    default_level: int = 5
+    enabled_levels: list[int] = field(default_factory=lambda: list(range(1, 20)))
+    level_names :Mapping[int, str] | None = None
+    aliases: dict[str, int] | None = None
+    log_file_path: str | None = None
+    output_console: bool = True
+    output_file: bool = True
+
+    def debug(self):
+        self.output_console = True
+        self.output_file = True
+        self.default_level = 1
 
 class Logger:
     """基于 loguru 实现的支持 1-20 数字级别与别名映射的日志器。"""
@@ -83,7 +129,8 @@ class Logger:
                     # 双重保险
                     pass
 
-    def _get_level_color(self, level_num: int) -> str:
+    @staticmethod
+    def _get_level_color(level_num: int) -> str:
         if level_num <= 3:
             return "<cyan>"
         elif level_num <= 6:
@@ -136,10 +183,12 @@ class Logger:
             if self.config.output_console:
                 loguru_logger.add(
                     sys.stdout,
-                    filter=self._loguru_filter,
-                    format=self._loguru_formatter,
+                    filter=cast(_loguru_filter_type, self._loguru_filter),
+                    format=cast(_loguru_formatter_type, self._loguru_formatter),
                     level=self.default_level,
-                    colorize=True
+                    colorize=True,
+                    backtrace=False,  # 不打印内部错误堆栈
+                    diagnose=False,  # 不解析内部错误
                 )
 
             # 添加文件 handler
@@ -147,8 +196,8 @@ class Logger:
                 self.log_file_path.parent.mkdir(parents=True, exist_ok=True)
                 loguru_logger.add(
                     str(self.log_file_path),
-                    filter=self._loguru_filter,
-                    format=self._loguru_formatter,
+                    filter=cast(_loguru_filter_type, self._loguru_filter),
+                    format=cast(_loguru_formatter_type, self._loguru_formatter),
                     level=self.default_level,
                     encoding="utf-8"
                 )
@@ -181,15 +230,23 @@ class Logger:
             # 重新应用 handler
             self._setup_handlers()
 
-    def bind(self, **kwargs):
+    @staticmethod
+    def bind(**kwargs):
         return loguru_logger.bind(**kwargs)
+
+    def set_debug(self):
+        self.set_default_level(DEFAULT_LEVEL_ALIASES['debug'])
 
     def log(self, level: int | str, message: str,f_name="") -> None:
         """通用日志输出方法"""
         normalized_level = self._normalize_level(level)
         level_name = self.level_names.get(normalized_level, f"L{normalized_level}")
         message = f"[{f_name}] {message}" if f_name else str(message)
-        loguru_logger.log(level_name, message)
+        try:
+            loguru_logger.log(level_name, message)
+        except Exception as _:
+            import traceback
+            print(traceback.format_exc())
 
     def debug(self, message: str,f_name='') -> None:
         self.log(DEFAULT_LEVEL_ALIASES['debug'], message,f_name)
@@ -211,4 +268,4 @@ class Logger:
 
 logger = Logger()
 
-__all__ = ["Logger",'logger']
+__all__ = ["Logger",'logger','DEFAULT_LEVEL_ALIASES','DEFAULT_LEVEL_NAMES','LogConfig']

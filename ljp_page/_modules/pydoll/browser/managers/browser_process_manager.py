@@ -45,7 +45,7 @@ class BrowserProcessManager:
 
         注意：
             自动添加 --remote-debugging-port 参数。"""
-        logger.info(f'Starting browser process: {binary_location} on port {port}')
+        logger.debug(f'Starting browser process: {binary_location} on port {port}')
         command = [
             binary_location,
             f'--remote-debugging-port={port}',

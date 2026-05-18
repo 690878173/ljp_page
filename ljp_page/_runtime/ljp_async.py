@@ -1,18 +1,15 @@
-﻿# 04-01-20-27-00
-"""轻量异步运行时。"""
-
+﻿"""轻量异步运行时。"""
 from __future__ import annotations
 
 import asyncio
 import inspect
 import threading
-import time
 from concurrent.futures import Future
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
-from ljp_page._core.base.Ljp_base_class import Ljp_BaseClass
-from ljp_page._core.exceptions import No
+from ljp_page._core._base_class import Ljp_BaseClass
+from ljp_page._core._exceptions import No
 
 
 @dataclass(slots=True)
@@ -41,14 +38,11 @@ class Async(Ljp_BaseClass):
     def __init__(
         self,
         mode: int = 1,
-        max_concurrent: int = 20,
-        max_inner_concurrent: int = 100,
         logger: Any = None,
     ) -> None:
-        super().__init__(logger=logger)
+        super().__init__()
+        self.logger = logger
         self.mode = mode
-        self.max_concurrent = max_concurrent
-        self.max_inner_concurrent = max_inner_concurrent
 
         self.loop: asyncio.AbstractEventLoop | None = None
         self.loop_thread: threading.Thread | None = None
@@ -60,9 +54,6 @@ class Async(Ljp_BaseClass):
         self._task_history: dict[str, Future[Any]] = {}
         self._stats = AsyncStats()
 
-        self._outer_semaphore: asyncio.Semaphore | None = None
-        self._inner_semaphore: asyncio.Semaphore | None = None
-
         self._start_loop()
 
     def _run_loop(self) -> None:
@@ -70,8 +61,6 @@ class Async(Ljp_BaseClass):
         asyncio.set_event_loop(loop)
         with self._lock:
             self.loop = loop
-            self._outer_semaphore = asyncio.Semaphore(self.max_concurrent)
-            self._inner_semaphore = asyncio.Semaphore(self.max_inner_concurrent)
         self._started.set()
 
         try:
@@ -87,8 +76,6 @@ class Async(Ljp_BaseClass):
             loop.close()
             with self._lock:
                 self.loop = None
-                self._outer_semaphore = None
-                self._inner_semaphore = None
 
     def _start_loop(self) -> None:
         with self._lock:
@@ -135,18 +122,6 @@ class Async(Ljp_BaseClass):
                 raise RuntimeError("事件循环不可用")
             return self.loop
 
-    async def _wrapped_outer_coro(self, awaitable: Awaitable[Any]) -> Any:
-        if self._outer_semaphore is None:
-            raise RuntimeError("外层信号量不可用")
-        async with self._outer_semaphore:
-            return await awaitable
-
-    async def _wrapped_inner_coro(self, awaitable: Awaitable[Any]) -> Any:
-        if self._inner_semaphore is None:
-            raise RuntimeError("内层信号量不可用")
-        async with self._inner_semaphore:
-            return await awaitable
-
     def _next_task_id(self, task_id: str | None) -> str:
         if task_id is not None:
             return task_id
@@ -182,7 +157,7 @@ class Async(Ljp_BaseClass):
         if not inspect.isawaitable(coro):
             raise TypeError("coro 必须是可等待对象")
 
-        wrapped: Awaitable[Any] = self._wrapped_outer_coro(coro)
+        wrapped: Awaitable[Any] = coro
         if timeout is not None:
             wrapped = asyncio.wait_for(wrapped, timeout=timeout)
 
@@ -246,7 +221,7 @@ class Async(Ljp_BaseClass):
     async def submit_inside(self, coro: Awaitable[Any]) -> Any:
         if not inspect.isawaitable(coro):
             raise TypeError("coro 必须是可等待对象")
-        return await self._wrapped_inner_coro(coro)
+        return await coro
 
     async def submit_inside_s(
         self,

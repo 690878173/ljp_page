@@ -6,7 +6,7 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Any
 
-from .task import TaskHandle
+from .task import Task
 
 
 @dataclass(slots=True)
@@ -38,8 +38,8 @@ class TaskRegistry:
 
         self._lock = threading.RLock()
         self._task_seq = 0
-        self._active_handles: dict[str, TaskHandle[Any]] = {}
-        self._history_handles: OrderedDict[str, TaskHandle[Any]] = OrderedDict()
+        self._active_handles: dict[str, Task[Any]] = {}
+        self._history_handles: OrderedDict[str, Task[Any]] = OrderedDict()
         self._stats = TaskRegistryStats()
 
     def _refresh_running_locked(self) -> None:
@@ -60,7 +60,7 @@ class TaskRegistry:
                 if generated not in self._active_handles:
                     return generated
 
-    def track(self, handle: TaskHandle[Any]) -> TaskHandle[Any]:
+    def track(self, handle: Task[Any]) -> Task[Any]:
         """注册任务句柄，并在完成后转入历史。"""
         with self._lock:
             if handle.task_id in self._active_handles:
@@ -74,7 +74,7 @@ class TaskRegistry:
         handle.add_done_callback(self._on_handle_done)
         return handle
 
-    def _on_handle_done(self, handle: TaskHandle[Any]) -> None:
+    def _on_handle_done(self, handle: Task[Any]) -> None:
         """任务完成时更新历史缓存与统计。"""
         with self._lock:
             active_handle = self._active_handles.get(handle.task_id)
@@ -96,7 +96,7 @@ class TaskRegistry:
             while len(self._history_handles) > self.history_limit:
                 self._history_handles.popitem(last=False)
 
-    def get_handle(self, task_id: str) -> TaskHandle[Any] | None:
+    def get_handle(self, task_id: str) -> Task[Any] | None:
         """按任务 ID 获取句柄。"""
         with self._lock:
             handle = self._active_handles.get(task_id)

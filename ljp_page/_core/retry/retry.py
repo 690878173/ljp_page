@@ -10,7 +10,7 @@ T = TypeVar('T')
 
 @dataclass
 class RetryConfig:
-    max_retries: int = 5
+    max_retries: int = 2
     exceptions: Union[Type[Exception], List[Type[Exception]]] = Exception
     on_retry: Optional[Callable] = None
     delay: float = 0
@@ -57,16 +57,15 @@ class RetryConfig:
             await asyncio.sleep(wait_time)
 
     def is_matching_exception(self, exc: Exception) -> bool:
-        if isinstance(self.exceptions, (list, tuple)):
-            return any(isinstance(exc, e) for e in self.exceptions)
-        return isinstance(exc, self.exceptions)
+        exc_types = self.exceptions if isinstance(self.exceptions, (list, tuple)) else (self.exceptions,)
+        return isinstance(exc, exc_types)
 
     def should_retry(self, exc: Exception, other: Exception) -> bool:
         return self.is_matching_exception(exc) or self.is_matching_exception(other)
 
 def retry(
     config = None,
-    max_retries: int = 5,
+    max_retries: int = 2,
     exceptions: Union[Type[Exception], List[Type[Exception]]] = Exception,
     on_retry: Optional[Callable] = None,
     delay: float = 0,

@@ -59,7 +59,7 @@ class ConnectionHandler:
         self._command_manager = CommandsManager()
         self._events_handler = EventsManager()
         self._receive_task: Optional[asyncio.Task] = None
-        logger.info('ConnectionHandler initialized.')
+        logger.debug('ConnectionHandler initialized.')
         logger.debug(
             f'Init params: port={self._connection_port}, page_id={self._page_id}, '
             f'ws_address_set={bool(self._ws_address)}'

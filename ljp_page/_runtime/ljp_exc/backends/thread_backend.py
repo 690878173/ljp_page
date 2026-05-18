@@ -6,7 +6,7 @@ from typing import Any, cast
 
 from ...threadpool import ThreadPool
 from .base import BaseBackend
-from ..task import BoundTask, TaskSubmitConfig
+from ..task import BindTask, TaskSubmitConfig
 
 
 class ThreadBackend(BaseBackend):
@@ -23,14 +23,14 @@ class ThreadBackend(BaseBackend):
         thread_name_prefix: str = "LjpExcThreadPool",
         logger: Any = None,
     ) -> None:
-        super().__init__(logger=logger)
+        super().__init__()
         self.pool = pool or ThreadPool(
             max_workers=max_workers,
             thread_name_prefix=thread_name_prefix,
             logger=logger,
         )
 
-    def submit(self, bound_task: BoundTask, config: TaskSubmitConfig) -> Future[Any]:
+    def submit(self, bound_task: BindTask, config: TaskSubmitConfig) -> Future[Any]:
         if bound_task.is_async_target():
             raise TypeError("thread 模式只支持普通函数")
 

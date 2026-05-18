@@ -1,16 +1,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
-import aiohttp
+from ljp_page._core.other import deprecated_class
 
+if TYPE_CHECKING:
+    import aiohttp
 
 @dataclass
 class TimeoutConfig:
     """连接与读取超时配置。"""
 
-    connect: float = 10.0
+    connect: float = 20.0
     read: float = 10.0
     extra: dict[str, Any] = field(default_factory=dict)
 
@@ -23,7 +25,7 @@ class TimeoutConfig:
     @property
     def aiohttp_timeout(self) -> aiohttp.ClientTimeout:
         """aiohttp 适配超时。"""
-
+        import aiohttp
         return aiohttp.ClientTimeout(
             total=self.connect + self.read,
             connect=self.connect,
@@ -31,10 +33,11 @@ class TimeoutConfig:
             sock_read=self.read,
         )
 
-
+@deprecated_class("已废弃")
 @dataclass
 class RetryConfig:
     """重试策略配置。"""
+    '''将被弃用，将requests的other清除后'''
 
     total: int = 2
     backoff_factor: float = 0.5

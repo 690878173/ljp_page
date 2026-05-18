@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
-from ljp_page._core.base.Ljp_base_class import Ljp_BaseClass
+from ljp_page._core._base_class import Ljp_BaseClass
 
 
 @dataclass(slots=True)
@@ -17,26 +17,20 @@ class FfmpegConfig:
     log_level: str = "error"
 
 
-class BaseVideoMerger(Ljp_BaseClass):
-    """视频合并器基类。"""
-
-    async def merge(self, segment_files: Sequence[Path], filelist_path: Path, output_file: Path) -> Path:
-        raise NotImplementedError
-
-
-class FfmpegVideoMerger(BaseVideoMerger):
+class FfmpegVideoMerger(Ljp_BaseClass):
     """基于 ffmpeg concat 的合并实现。"""
 
     def __init__(self, config: FfmpegConfig, logger=None) -> None:
-        super().__init__(logger=logger)
+        super().__init__()
         self.config = config
+        self.logger = logger
 
     async def merge(self, segment_files: Sequence[Path], filelist_path: Path, output_file: Path) -> Path:
         if not segment_files:
             raise ValueError("no a_ts files to merge")
 
-        lines = [f"file '{item.name}'" for item in segment_files]
-        filelist_path.write_text("\n".join(lines), encoding="utf-8")
+        lines = [f'file "{item.name}"' for item in segment_files]
+        filelist_path.write_text("\n".join(lines), encoding="utf-8",newline='')
 
         command = [
             self.config.ffmpeg_path,
@@ -66,4 +60,4 @@ class FfmpegVideoMerger(BaseVideoMerger):
         return output_file
 
 
-__all__ = ["BaseVideoMerger", "FfmpegConfig", "FfmpegVideoMerger"]
+__all__ = ["FfmpegConfig", "FfmpegVideoMerger"]

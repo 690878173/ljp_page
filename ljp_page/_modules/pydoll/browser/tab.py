@@ -914,7 +914,7 @@ class Tab(FindElementsMixin):
 
     async def delete_all_cookies(self):
         """从当前浏览器上下文中删除所有 cookie。"""
-        logger.info('Clearing all cookies from current browser context')
+        logger.info('从当前浏览器上下文中删除所有 cookie')
         return await self._execute_command(StorageCommands.clear_cookies(self._browser_context_id))
 
     async def go_to(self, url: str, timeout: int = 300):
@@ -927,13 +927,13 @@ class Tab(FindElementsMixin):
         加薪：
             NavigationError：如果导航失败（例如 DNS 错误）。
             PageLoadTimeout：如果页面在超时时间内未完成加载。"""
-        logger.info(f'Navigating to URL: {url} (timeout={timeout}s)')
+        logger.debug(f'Navigating to URL: {url} (timeout={timeout}s)')
         async with self._wait_page_load(timeout=timeout):
             response: NavigateResponse = await self._execute_command(PageCommands.navigate(url))
             error_text = response['result'].get('errorText')
             if error_text:
                 raise NavigationError(url, error_text)
-        logger.info(f'Navigation complete: {url}')
+        logger.debug(f'Navigation complete: {url}')
 
     async def refresh(
         self,
@@ -1924,7 +1924,7 @@ class Tab(FindElementsMixin):
 
             if asyncio.get_event_loop().time() - start_time > timeout:
                 raise WaitElementTimeout(
-                    f'Timed out after {timeout}s waiting for Cloudflare Turnstile shadow root'
+                    f'超时:{timeout}s waiting for Cloudflare Turnstile shadow root'
                 )
             await asyncio.sleep(0.5)
 
@@ -1948,7 +1948,7 @@ class Tab(FindElementsMixin):
             checkbox = await inner_shadow.query(_CLOUDFLARE_CHECKBOX_SELECTOR, timeout=timeout_int)
             await checkbox.click()
         except Exception as exc:
-            logger.error(f'Error in cloudflare bypass: {exc}')
+            logger.error(f'cloudflare验证错误: {exc}')
 
     async def cf(self,time_to_wait_captcha: float = 5) -> None:
         await self._bypass_cloudflare(event=None, time_to_wait_captcha=time_to_wait_captcha)

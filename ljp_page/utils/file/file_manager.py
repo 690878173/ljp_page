@@ -7,7 +7,7 @@ from typing import Optional, Any, Dict, List
 
 import aiofiles
 
-from ljp_page._core.base.Ljp_base_class import Ljp_BaseClass
+from ljp_page._core.Ljp_base_class import Ljp_BaseClass
 
 
 class _FileHandleBase(Ljp_BaseClass):
@@ -29,7 +29,7 @@ class _FileHandleBase(Ljp_BaseClass):
             max_open_files: 最大同时打开文件数量
             logger: 日志记录器
         """
-        super().__init__(logger)
+        super().__init__()
         self._max_open_files = max_open_files
         self._file_dict: OrderedDict[str, Any] = OrderedDict()
         self._access_time: Dict[str, float] = {}
@@ -270,7 +270,7 @@ class _DirectoryBase(Ljp_BaseClass):
             mode: 目录模式（'mode1'或'mode2'）
             logger: 日志记录器
         """
-        super().__init__(logger)
+        super().__init__()
         self._directory_path = directory_path
         self._directory_num = directory_num
         self._mode = mode

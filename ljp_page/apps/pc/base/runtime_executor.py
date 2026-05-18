@@ -7,7 +7,7 @@ import asyncio
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Iterable, Sequence
 
-from ljp_page._core.base.Ljp_base_class import Ljp_BaseClass
+from ljp_page._core.Ljp_base_class import Ljp_BaseClass
 
 
 @dataclass(slots=True)

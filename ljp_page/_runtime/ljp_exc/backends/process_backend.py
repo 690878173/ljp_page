@@ -5,7 +5,7 @@ from concurrent.futures import Future
 from typing import Any
 
 from .base import BaseBackend
-from ..task import BoundTask, TaskSubmitConfig
+from ..task import BindTask, TaskSubmitConfig
 
 
 class ProcessBackend(BaseBackend):
@@ -14,6 +14,6 @@ class ProcessBackend(BaseBackend):
     mode_name = "process"
     backend_name = "process"
 
-    def submit(self, bound_task: BoundTask, config: TaskSubmitConfig) -> Future[Any]:
+    def submit(self, bound_task: BindTask, config: TaskSubmitConfig) -> Future[Any]:
         raise NotImplementedError("process 后端预留，但当前版本暂未实现")
 

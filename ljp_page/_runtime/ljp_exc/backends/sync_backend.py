@@ -5,7 +5,7 @@ from concurrent.futures import Future
 from typing import Any
 
 from .base import BaseBackend
-from ..task import BoundTask, TaskSubmitConfig
+from ..task import BindTask, TaskSubmitConfig
 
 
 class SyncBackend(BaseBackend):
@@ -14,7 +14,7 @@ class SyncBackend(BaseBackend):
     mode_name = "sync"
     backend_name = "sync"
 
-    def submit(self, bound_task: BoundTask, config: TaskSubmitConfig) -> Future[Any]:
+    def submit(self, bound_task: BindTask, config: TaskSubmitConfig) -> Future[Any]:
         future: Future[Any] = Future()
         future.set_running_or_notify_cancel()
 

@@ -5,7 +5,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, Callable, Iterable, Optional, TypeVar, cast
 
-from ljp_page._core.base.Ljp_base_class import Ljp_BaseClass
+from ljp_page._core._base_class import Ljp_BaseClass
 
 _T = TypeVar("_T")
 
@@ -40,7 +40,8 @@ class ThreadPool(Ljp_BaseClass):
         thread_name_prefix: str = "LjpThreadPool",
         logger: Any = None,
     ) -> None:
-        super().__init__(logger=logger)
+        super().__init__()
+        self.logger = logger
         self.max_workers = max_workers
         self.thread_name_prefix = thread_name_prefix
 
@@ -98,10 +99,12 @@ class ThreadPool(Ljp_BaseClass):
                 self._refresh_running_locked()
 
             if task_exception is not None and not was_cancelled:
-                self.error(
-                    f"线程池任务执行失败(task_id={task_id}): {task_exception}",
-                    self.submit.__name__,
-                )
+                # self.error(
+                #     f"线程池任务执行失败(task_id={task_id}): {task_exception}",
+                #     self.submit.__name__,
+                # )
+                # 当前取消底层记录失败，由调用方自行捕获
+                pass
 
         future.add_done_callback(_on_done)
 

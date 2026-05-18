@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import threading
 import uuid
+from abc import abstractmethod, ABC
 from copy import deepcopy
 from typing import Any, Mapping
 from urllib.parse import urlparse
@@ -10,15 +11,15 @@ from urllib.parse import urlparse
 import aiohttp
 import requests
 
-from ljp_page._core.base.Ljp_base_class import Ljp_BaseClass
+from ljp_page._core._base_class import Ljp_BaseClass
 from ljp_page._core.config import TimeoutConfig
-from ljp_page._core.exceptions import NetworkException, TimeoutException
+from ljp_page._core._exceptions import NetworkException, TimeoutException
 from ljp_page._core.logger import Logger
 
 from .config import AdapterResponse, LjpConfig, LjpResponse, RequestContext
 
 
-class RequestModuleBase(Ljp_BaseClass):
+class RequestModuleBase(Ljp_BaseClass,ABC):
     def __init__(self, config: LjpConfig, logger: Logger = None):
         super().__init__()
         self.config = config
@@ -142,7 +143,7 @@ class RequestModuleBase(Ljp_BaseClass):
         )
 
 
-class AsyncRequestModuleBase(RequestModuleBase):
+class AsyncRequestModuleBase(RequestModuleBase,ABC):
     async def _resolve_request_session(
         self,
         native_session: aiohttp.ClientSession | None,
@@ -157,9 +158,13 @@ class AsyncRequestModuleBase(RequestModuleBase):
 
     @staticmethod
     def _extract_cookies(session: aiohttp.ClientSession) -> dict[str, str]:
-        return {cookie.key: cookie.value for cookie in session.cookie_jar}
+        return {
+            cookie.key: cookie.value
+            for cookie in session.cookie_jar.__iter__()
+        }
 
-    def _map_exception(self, exc: Exception, context: RequestContext) -> Exception:
+    @staticmethod
+    def _map_exception(exc: Exception, context: RequestContext) -> Exception:
         if isinstance(exc, (TimeoutException, NetworkException)):
             return exc
 
@@ -202,11 +207,11 @@ class AsyncRequestModuleBase(RequestModuleBase):
                 e=exc,
                 context=common_context,
             )
-
         return exc
 
+    @abstractmethod
     async def request(self, method: str, url: str, **kwargs: Any) -> LjpResponse:
-        raise NotImplementedError()
+        pass
 
     async def get(self, url: str, **kwargs: Any) -> LjpResponse:
         return await self.request("GET", url, **kwargs)

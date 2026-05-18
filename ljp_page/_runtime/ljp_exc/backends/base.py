@@ -4,8 +4,8 @@ from __future__ import annotations
 from concurrent.futures import Future
 from typing import Any
 
-from ljp_page._core.base.Ljp_base_class import Ljp_BaseClass
-from ..task import BoundTask, TaskSubmitConfig
+from ljp_page._core._base_class import Ljp_BaseClass
+from ..task import BindTask, TaskSubmitConfig
 
 
 class BaseBackend(Ljp_BaseClass):
@@ -14,7 +14,7 @@ class BaseBackend(Ljp_BaseClass):
     mode_name = "base"
     backend_name = "base"
 
-    def submit(self, bound_task: BoundTask, config: TaskSubmitConfig) -> Future[Any]:
+    def submit(self, bound_task: BindTask, config: TaskSubmitConfig) -> Future[Any]:
         """提交单个任务。"""
         raise NotImplementedError
 

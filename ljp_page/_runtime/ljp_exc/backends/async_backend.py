@@ -3,11 +3,11 @@ from __future__ import annotations
 
 import asyncio
 from concurrent.futures import Future
-from typing import Any, Awaitable, Coroutine, cast
+from typing import Any, Awaitable, cast
 
 from ...ljp_async import Async
 from .base import BaseBackend
-from ..task import BoundTask, TaskSubmitConfig
+from ..task import BindTask, TaskSubmitConfig
 
 
 class AsyncBackend(BaseBackend):
@@ -21,55 +21,60 @@ class AsyncBackend(BaseBackend):
         runtime: Async | None = None,
         *,
         async_mode: int = 1,
-        max_concurrent: int = 20,
-        max_inner_concurrent: int = 100,
         logger: Any = None,
     ) -> None:
-        super().__init__(logger=logger)
+        super().__init__()
         self.runtime = runtime or Async(
             mode=async_mode,
-            max_concurrent=max_concurrent,
-            max_inner_concurrent=max_inner_concurrent,
             logger=logger,
         )
 
-    def submit(self, bound_task: BoundTask, config: TaskSubmitConfig) -> Future[Any]:
-        if config.layer == "outer":
-            return self._submit_outer(bound_task, config)
-        if config.layer == "inner":
-            return self._submit_inner(bound_task, config)
-        raise ValueError(f"async 后端不支持的 layer: {config.layer}")
+    def submit(self, bound_task: BindTask, config: TaskSubmitConfig) -> Future[Any]:
+        return self._submit(bound_task, config)
 
-    def _submit_outer(self, bound_task: BoundTask, config: TaskSubmitConfig) -> Future[Any]:
+    def _submit(self, bound_task: BindTask, config: TaskSubmitConfig) -> Future[Any]:
         awaitable = bound_task.create_awaitable()
-        return cast(
-            Future[Any],
-            self.runtime.submit(
-                awaitable,
-                timeout=config.timeout,
-                task_id=config.task_id,
-                await_result=False,
-            ),
-        )
-
-    def _submit_inner(self, bound_task: BoundTask, config: TaskSubmitConfig) -> Future[Any]:
-        awaitable = bound_task.create_awaitable()
-        wrapped: Awaitable[Any] = self.runtime._wrapped_inner_coro(awaitable)
+        awaitable = self._wrap_with_semaphores(awaitable, config.semaphores)
+        wrapped: Awaitable[Any] = awaitable
         if config.timeout is not None:
             wrapped = asyncio.wait_for(wrapped, timeout=config.timeout)
 
         try:
             return cast(
                 Future[Any],
-                asyncio.run_coroutine_threadsafe(
-                    cast(Coroutine[Any, Any, Any], wrapped),
-                    self.runtime.get_event_loop(),
+                self.runtime.submit(
+                    wrapped,
+                    task_id=config.task_id,
+                    await_result=False,
                 ),
             )
         except Exception:
             self._close_if_coroutine(wrapped)
             self._close_if_coroutine(awaitable)
             raise
+
+    @classmethod
+    def _wrap_with_semaphores(
+        cls,
+        awaitable: Awaitable[Any],
+        semaphores: tuple[asyncio.Semaphore, ...],
+    ) -> Awaitable[Any]:
+        if not semaphores:
+            return awaitable
+        return cls._run_with_semaphores(awaitable, semaphores)
+
+    @staticmethod
+    async def _run_with_semaphores(
+        awaitable: Awaitable[Any],
+        semaphores: tuple[asyncio.Semaphore, ...],
+    ) -> Any:
+        async def _enter(index: int) -> Any:
+            if index >= len(semaphores):
+                return await awaitable
+            async with semaphores[index]:
+                return await _enter(index + 1)
+
+        return await _enter(0)
 
     @staticmethod
     def _close_if_coroutine(obj: Any) -> None:

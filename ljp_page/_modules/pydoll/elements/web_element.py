@@ -294,7 +294,7 @@ class WebElement(FindElementsMixin):  #编号：PLR0904
 
             if asyncio.get_event_loop().time() - start_time > timeout:
                 raise WaitElementTimeout(
-                    f'Timed out after {timeout}s waiting for shadow root on element'
+                    f'超时{timeout}s 等待影子根元素'
                 )
 
             await asyncio.sleep(0.5)

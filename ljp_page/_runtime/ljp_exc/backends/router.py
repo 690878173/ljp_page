@@ -11,7 +11,7 @@ from .base import BaseBackend
 from .process_backend import ProcessBackend
 from .sync_backend import SyncBackend
 from .thread_backend import ThreadBackend
-from ..task import BoundTask
+from ..task import BindTask
 
 
 class BackendRouter:
@@ -28,8 +28,6 @@ class BackendRouter:
         thread_max_workers: int | None = None,
         thread_name_prefix: str = "LjpExcThreadPool",
         async_mode: int = 1,
-        async_outer_concurrent: int = 20,
-        async_inner_concurrent: int = 100,
     ) -> None:
         self.logger = logger
         self.thread_pool = thread_pool
@@ -39,20 +37,18 @@ class BackendRouter:
         self._thread_max_workers = thread_max_workers
         self._thread_name_prefix = thread_name_prefix
         self._async_mode = async_mode
-        self._async_outer_concurrent = async_outer_concurrent
-        self._async_inner_concurrent = async_inner_concurrent
 
-        self._sync_backend: SyncBackend = SyncBackend(logger=logger)
+        self._sync_backend: SyncBackend = SyncBackend()
         self._thread_backend: ThreadBackend | None = None
         self._async_backend: AsyncBackend | None = None
-        self._process_backend: ProcessBackend = ProcessBackend(logger=logger)
+        self._process_backend: ProcessBackend = ProcessBackend()
 
     def validate_mode(self, mode: str) -> None:
         """校验 mode 是否受支持。"""
         if mode not in self.SUPPORTED_MODES:
             raise ValueError(f"不支持的 mode: {mode}")
 
-    def resolve_mode(self, bound_task: BoundTask, mode: str) -> str:
+    def resolve_mode(self, bound_task: BindTask, mode: str) -> str:
         """根据目标类型和上下文解析最终 mode。"""
         self.validate_mode(mode)
         if mode != "auto":
@@ -87,8 +83,6 @@ class BackendRouter:
                 self._async_backend = AsyncBackend(
                     runtime=self.asy,
                     async_mode=self._async_mode,
-                    max_concurrent=self._async_outer_concurrent,
-                    max_inner_concurrent=self._async_inner_concurrent,
                     logger=self.logger,
                 )
                 self.asy = self._async_backend.runtime
@@ -99,7 +93,7 @@ class BackendRouter:
 
         raise ValueError(f"未知 mode: {resolved_mode}")
 
-    def select_backend(self, bound_task: BoundTask, mode: str) -> tuple[str, BaseBackend]:
+    def select_backend(self, bound_task: BindTask, mode: str) -> tuple[str, BaseBackend]:
         """一步完成 mode 解析与后端选择。"""
         resolved_mode = self.resolve_mode(bound_task, mode)
         return resolved_mode, self.get_backend(resolved_mode)

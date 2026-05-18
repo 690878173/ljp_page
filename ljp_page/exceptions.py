@@ -1,44 +1,4 @@
-﻿# 04-01-20-05-00
-"""Public exception exports."""
+﻿from ljp_page._core._exceptions import *
+from ljp_page._core._exceptions import __all__ as __e__all__
 
-from ljp_page._core.exceptions import (
-    ALL_EXCEPTIONS,
-    CaptchaException,
-    ConfigError,
-    EncodingException,
-    HTTPStatusException,
-    LjpBaseException,
-    LjpRequestException,
-    MaxRetriesException,
-    MeetCheckError,
-    NetworkException,
-    No,
-    Notfound,
-    ParseError,
-    ProxyException,
-    ResponseParseException,
-    SSLException,
-    TimeoutException,
-    Yes,
-)
-
-__all__ = [
-    "ALL_EXCEPTIONS",
-    "CaptchaException",
-    "ConfigError",
-    "EncodingException",
-    "HTTPStatusException",
-    "LjpBaseException",
-    "LjpRequestException",
-    "MaxRetriesException",
-    "MeetCheckError",
-    "NetworkException",
-    "No",
-    "Notfound",
-    "ParseError",
-    "ProxyException",
-    "ResponseParseException",
-    "SSLException",
-    "TimeoutException",
-    "Yes",
-]
+__all__ = __e__all__

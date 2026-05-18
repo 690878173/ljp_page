@@ -15,10 +15,11 @@ class TaskSubmitConfig:
     """统一任务配置。"""
 
     mode: str = "auto"
-    layer: str = "outer"
     task_id: str | None = None
     timeout: float | None = None
     callback: Callable[[Any], Any] | None = None
+    semaphores: tuple[asyncio.Semaphore, ...] = ()
+    semaphore_names: tuple[str, ...] = ()
 
     def with_task_id(self, task_id: str | None) -> "TaskSubmitConfig":
         """返回仅替换任务 ID 后的新配置。"""
@@ -26,7 +27,7 @@ class TaskSubmitConfig:
 
 
 @dataclass(slots=True)
-class BoundTask:
+class BindTask:
     """保存目标函数及其绑定参数，避免与调度参数冲突。"""
 
     target: Any
@@ -78,18 +79,18 @@ class BoundTask:
 
 
 @dataclass(slots=True, frozen=True)
-class TaskHandleMeta:
+class TaskMeta:
     """集中保存句柄元信息，减少大量任务场景下的实例开销。"""
 
     task_id: str
     mode_requested: str
     mode_resolved: str
-    layer: str
     backend_name: str
     target_name: str = "submit"
+    semaphore_names: tuple[str, ...] = ()
 
 
-class TaskHandle(Generic[_T]):
+class Task(Generic[_T]):
     """统一任务句柄，对外屏蔽底层 Future 类型差异。"""
 
     __slots__ = ("_future", "_meta", "_bound_task")
@@ -101,19 +102,30 @@ class TaskHandle(Generic[_T]):
         task_id: str,
         mode_requested: str,
         mode_resolved: str,
-        layer: str,
         backend_name: str,
-        bound_task: BoundTask | None = None,
+        semaphore_names: tuple[str, ...] = (),
+        bound_task: BindTask | None = None,
     ) -> None:
+        """初始化任务句柄。
+
+        Args:
+            future: 底层的 Future 对象
+            task_id: 任务唯一 ID
+            mode_requested: 用户请求的执行模式（thread/async）
+            mode_resolved: 实际使用的执行模式
+            backend_name: 执行后端名称
+            semaphore_names: 限流信号量名称
+            bound_task: 绑定的任务对象（可选）
+        """
         self._future = future
         resolved_target_name = bound_task.target_name if bound_task is not None else "submit"
-        self._meta = TaskHandleMeta(
+        self._meta = TaskMeta(
             task_id=task_id,
             mode_requested=mode_requested,
             mode_resolved=mode_resolved,
-            layer=layer,
             backend_name=backend_name,
             target_name=resolved_target_name,
+            semaphore_names=semaphore_names,
         )
         self._bound_task = bound_task
 
@@ -139,8 +151,13 @@ class TaskHandle(Generic[_T]):
 
     @property
     def layer(self) -> str:
-        """返回当前任务所在层级。"""
-        return self._meta.layer
+        """兼容旧接口：返回当前任务使用的并发池。"""
+        return ",".join(self._meta.semaphore_names)
+
+    @property
+    def semaphore_names(self) -> tuple[str, ...]:
+        """返回当前任务使用的命名并发池。"""
+        return self._meta.semaphore_names
 
     @property
     def backend_name(self) -> str:
@@ -148,7 +165,7 @@ class TaskHandle(Generic[_T]):
         return self._meta.backend_name
 
     @property
-    def bound_task(self) -> BoundTask | None:
+    def bound_task(self) -> BindTask | None:
         """返回关联的绑定任务定义。"""
         return self._bound_task
 
@@ -188,13 +205,27 @@ class TaskHandle(Generic[_T]):
         """取消任务。"""
         return self._future.cancel()
 
+    def _check_blocking_wait_allowed(self, method_name: str) -> None:
+        """避免在异步事件循环中阻塞等待未完成任务。"""
+        if self._future.done():
+            return
+        if self.mode_resolved != "async":
+            return
+
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return
+
+        raise RuntimeError(
+            f"当前处于异步事件循环中，不能调用阻塞式 {method_name}() 等待未完成异步任务，"
+            "请使用 await handle 或 await handle.wait_async()"
+        )
+
     def result(self, timeout: float | None = None) -> _T:
         """等待并返回任务结果。"""
+        self._check_blocking_wait_allowed("result")
         return self._future.result(timeout=timeout)
-
-    def wait(self, timeout: float | None = None) -> _T:
-        """`result` 的语义化别名。"""
-        return self.result(timeout=timeout)
 
     async def wait_async(self) -> _T:
         """在异步上下文中等待任务结果。"""
@@ -202,9 +233,10 @@ class TaskHandle(Generic[_T]):
 
     def exception(self, timeout: float | None = None) -> BaseException | None:
         """等待并返回任务异常。"""
+        self._check_blocking_wait_allowed("exception")
         return self._future.exception(timeout=timeout)
 
-    def add_done_callback(self, callback: Callable[["TaskHandle[_T]"], Any]) -> "TaskHandle[_T]":
+    def add_done_callback(self, callback: Callable[["Task[_T]"], Any]) -> "Task[_T]":
         """注册完成回调，回调参数统一为当前句柄。"""
         if not callable(callback):
             raise TypeError("callback 必须是可调用对象")
@@ -222,21 +254,22 @@ class TaskHandle(Generic[_T]):
     def __repr__(self) -> str:
         return (
             f"TaskHandle(task_id={self.task_id!r}, status={self.status!r}, "
-            f"mode={self.mode_resolved!r}, layer={self.layer!r}, backend={self.backend_name!r})"
+            f"mode={self.mode_resolved!r}, semaphores={self.semaphore_names!r}, "
+            f"backend={self.backend_name!r})"
         )
 
 
-def coerce_bound_task(target: Any, *args: Any, **kwargs: Any) -> BoundTask:
-    """将输入标准化为 BoundTask。"""
-    if isinstance(target, BoundTask):
+def coerce_bind_task(target: Any, *args: Any, **kwargs: Any) -> BindTask:
+    """将输入标准化为 BindTask。"""
+    if isinstance(target, BindTask):
         if args or kwargs:
             raise ValueError("BoundTask 已经绑定参数，不能再次传入 args 或 kwargs")
         return target
 
-    if isinstance(target, TaskHandle):
+    if isinstance(target, Task):
         raise TypeError("这里不接受 TaskHandle，请传入可执行任务目标")
 
     if not callable(target) and not inspect.isawaitable(target):
         raise TypeError("target 必须是可调用对象、协程对象或 awaitable 对象")
 
-    return BoundTask(target=target, args=tuple(args), kwargs=dict(kwargs))
+    return BindTask(target=target, args=tuple(args), kwargs=dict(kwargs))

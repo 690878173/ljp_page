@@ -27,7 +27,10 @@ class AsyncSession(AsyncRequestModuleBase):
         self._session: aiohttp.ClientSession | None = None
         self._session_lock: asyncio.Lock | None = None
         self._cookie_store = deepcopy(self.config.request.cookies)
-        self._jar = aiohttp.CookieJar(unsafe=True)
+        try:
+            self._jar = aiohttp.CookieJar(unsafe=True)
+        except Exception as  e:
+            raise ValueError('不能在同步环境初始化')
         self._jar.update_cookies(self._cookie_store)
 
     @property
@@ -71,7 +74,9 @@ class AsyncSession(AsyncRequestModuleBase):
         with self._state_lock:
             self._cookie_store.update(dict(values))
             self.config.request.cookies = deepcopy(self._cookie_store)
-        self._sync_cookies_to_native()
+        self._jar.update_cookies(values)
+        if self._session and not self._session.closed:
+            self._session.cookie_jar.update_cookies(values)
 
     def clear_cookies(self) -> None:
         """清空当前会话维护的 Cookie。"""
@@ -153,10 +158,7 @@ class AsyncSession(AsyncRequestModuleBase):
         original_error: Exception,
         mapped_error: Exception,
     ) -> bool:
-        return (
-            retry_config.is_matching_exception(original_error)
-            or retry_config.is_matching_exception(mapped_error)
-        )
+        return retry_config.should_retry(original_error, mapped_error)
 
     async def _send_once(
         self,
@@ -172,9 +174,8 @@ class AsyncSession(AsyncRequestModuleBase):
         passthrough_kwargs = {
             key: value
             for key, value in context.extra.items()
-            if key != "native_session"
+            if key != "native_session" and key!= 'return_type'
         }
-
         try:
             async with request_session.request(
                 context.method,
@@ -188,7 +189,7 @@ class AsyncSession(AsyncRequestModuleBase):
                 allow_redirects=context.allow_redirects,
                 ssl=context.verify_ssl,
                 proxy=context.proxy_url,
-                **passthrough_kwargs,
+
             ) as response:
                 content = await response.read()
                 adapter_response = AdapterResponse(
@@ -224,7 +225,6 @@ class AsyncSession(AsyncRequestModuleBase):
         base_attempt = int(request_kwargs.pop("retry_attempt", 0))
         max_retries = max(0, self.config.retry.max_retries)
         delay = max(0.0, self.config.request.request_delay)
-
         for retry_index in range(max_retries + 1):
             if delay > 0:
                 await asyncio.sleep(delay)
@@ -248,10 +248,9 @@ class AsyncSession(AsyncRequestModuleBase):
                 raise
             except Exception as exc:
                 mapped_error = self._map_exception(exc, context)
-                if retry_index >= max_retries or not self._should_retry(
-                    self.config.retry,
+                if retry_index >= max_retries or not self.config.retry.should_retry(
                     exc,
-                    mapped_error,
+                    mapped_error
                 ):
                     raise mapped_error from exc
 

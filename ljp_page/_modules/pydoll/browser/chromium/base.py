@@ -116,7 +116,7 @@ class Browser(ABC):  #编号：PLR0904
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """异步上下文管理器退出并进行清理。"""
-        logger.debug(f'Exiting browser async context: exc_type={exc_type}')
+        logger.debug(f'异步上下文管理器退出并进行清理: exc_type={exc_type}')
         if self._backup_preferences_dir:
             logger.debug(f'Restoring backup preferences directory: {self._backup_preferences_dir}')
             user_data_dir = self._get_user_data_dir()
@@ -166,19 +166,19 @@ class Browser(ABC):  #编号：PLR0904
         logger.debug('User data directory configured')
         proxy_config = self._proxy_manager.get_proxy_credentials()
 
-        logger.info(f'Starting browser process on port {self._connection_port}')
+        logger.debug(f'浏览器进程:{self._connection_port}')
         self._browser_process_manager.start_browser_process(
             binary_location, self._connection_port, self.options.arguments
         )
         await self._verify_browser_running()
-        logger.info('Browser process started and responsive')
+        logger.debug('Browser process started and responsive')
         await self._configure_proxy(proxy_config[0], proxy_config[1])
 
         valid_tab_id = await self._get_valid_tab_id(await self.get_targets())
         tab = Tab(self, target_id=valid_tab_id, connection_port=self._connection_port)
         self._tabs_opened[valid_tab_id] = tab
         await self._apply_user_agent_override(tab)
-        logger.info(f'Initial tab attached: {valid_tab_id}')
+        logger.debug(f'Initial tab attached: {valid_tab_id}')
         return tab
 
     async def stop(self):
@@ -193,17 +193,17 @@ class Browser(ABC):  #编号：PLR0904
             logger.error('Stop called but browser is not running')
             raise BrowserNotRunning()
 
-        logger.info('Stopping browser process')
+        logger.debug('停止浏览器进程')
         await self._execute_command(BrowserCommands.close())
         self._browser_process_manager.stop_process()
         await self._connection_handler.close()
         await asyncio.sleep(0.5 if os.name == 'nt' else 0.1)
         self._temp_directory_manager.cleanup()
-        logger.info('Browser process stopped and resources cleaned up')
+        logger.info('停止浏览器进程')
 
     async def close(self):
         """关闭WebSocket连接并释放资源。"""
-        logger.info('Closing browser WebSocket connection')
+        logger.debug('关闭WebSocket连接并释放资源。')
         await self._connection_handler.close()
 
     async def create_browser_context(
