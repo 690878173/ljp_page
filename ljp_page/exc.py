@@ -1,5 +1,10 @@
-from ljp_page._runtime.ljp_async import Async
-from ljp_page._runtime.ljp_exc import LJPExc
-from ljp_page._runtime.threadpool import ThreadPool
+# 05-19-16-20-00
+from typing import TYPE_CHECKING
 
-__all__ = ["Async", "LJPExc", "ThreadPool"]
+from ljp_page._runtime import __all__ as __all__
+from ljp_page._runtime import __getattr__ as __getattr__
+
+if TYPE_CHECKING:
+    from ljp_page._runtime import Async as Async
+    from ljp_page._runtime import LJPExc as LJPExc
+    from ljp_page._runtime import ThreadPool as ThreadPool

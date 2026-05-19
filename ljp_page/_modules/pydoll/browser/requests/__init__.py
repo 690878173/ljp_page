@@ -1,8 +1,13 @@
-"""该模块使用浏览器的 fetch API 提供 HTTP 客户端功能。
-它允许在浏览器上下文中发出 HTTP 请求，重用 cookie 和标头。"""
+# 05-19-16-20-00
+"""浏览器 fetch API 请求模块导出。"""
 
-from .har_recorder import HarCapture
-from .request import Request
-from .response import Response
+from typing import TYPE_CHECKING
 
-__all__ = ['HarCapture', 'Request', 'Response']
+from ljp_page._core._lazy_import import bind_lazy_exports
+
+if TYPE_CHECKING:
+    from .har_recorder import *  # noqa: F403
+    from .request import *  # noqa: F403
+    from .response import *  # noqa: F403
+
+__getattr__, __all__ = bind_lazy_exports(__name__, __file__)

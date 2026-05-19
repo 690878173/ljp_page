@@ -45,3 +45,6 @@ class Html:
     def xpath_ls(html: Any, xpath: str) -> str:
         return "\n".join(html.xpath(xpath))
 
+
+__all__ = ["Html"]
+

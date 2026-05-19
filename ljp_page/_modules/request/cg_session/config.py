@@ -38,6 +38,7 @@ class LjpConfig:
     retry: RetryConfig = field(default_factory=RetryConfig)
     sessionpool: SessionPoolConfig = field(default_factory=SessionPoolConfig)
     proxy: ProxyConfig = field(default_factory=ProxyConfig)
+    log: Any | None = None
     extra: dict[str, Any] = field(default_factory=dict)
 
 
@@ -149,3 +150,14 @@ class LjpResponse:
                     "响应 JSON 解析失败",
                 ) from exc
         return self._json_cache
+
+
+__all__ = [
+    "RequestConfig",
+    "LjpConfig",
+    "RequestContext",
+    "AdapterResponse",
+    "LjpResponse",
+    "SessionPoolConfig",
+    "RetryConfig",
+]

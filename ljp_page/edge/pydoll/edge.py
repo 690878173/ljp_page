@@ -1,1 +1,0 @@
-from ljp_page._modules.pydoll.ljp_op.edge import Edge,EdgeConfig

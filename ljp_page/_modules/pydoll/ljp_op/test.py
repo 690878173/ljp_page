@@ -1,7 +1,7 @@
 import asyncio
 
 from ljp_page._modules.pydoll.ljp_op.edge import Edge
-from ljp_page.request import AsyncSession
+from ljp_page.pc.request import AsyncSession
 edge = Edge()
 async def main():
     session = AsyncSession()

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-from ljp_page.logger import logger
 import math
 import random
 from dataclasses import dataclass

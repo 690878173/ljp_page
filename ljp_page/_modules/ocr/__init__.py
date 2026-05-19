@@ -1,7 +1,9 @@
-from .ocr import Ocr
+# 05-19-16-20-00
+from typing import TYPE_CHECKING
 
+from ljp_page._core._lazy_import import bind_lazy_exports
 
+if TYPE_CHECKING:
+    from .ocr import *  # noqa: F403
 
-__all__ = [
-    'Ocr'
-]
+__getattr__, __all__ = bind_lazy_exports(__name__, __file__)

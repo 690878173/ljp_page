@@ -1,3 +1,8 @@
-from .logger import Logger,logger, LogConfig,DEFAULT_LEVEL_NAMES,DEFAULT_LEVEL_ALIASES
-from .logger import __all__
-__all__ = __all__
+from typing import TYPE_CHECKING
+
+from ljp_page._core._lazy_import import bind_lazy_exports
+
+if TYPE_CHECKING:
+    from .logger import *  # noqa: F403
+
+__getattr__, __all__ = bind_lazy_exports(__name__, __file__)

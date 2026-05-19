@@ -1,7 +1,7 @@
 import asyncio
 import random
 from typing import Optional, Dict, Any, List, Union
-from playwright.async_api import async_playwright, Browser, BrowserContext, Page, Error, Frame
+from playwright.async_api import async_playwright, Browser, BrowserContext, Page, Error
 from .base import PlaywrightModuleBase
 
 async def draw_click_marker(page, x, y):

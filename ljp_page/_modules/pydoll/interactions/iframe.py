@@ -1,6 +1,4 @@
 from __future__ import annotations
-from ljp_page.logger import logger
-
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Iterable, Optional
 

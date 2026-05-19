@@ -1,42 +1,39 @@
-
-from .session import AsyncSession
-from .sync_session import SyncSession
-from .config import LjpConfig,LjpResponse,RequestContext,AdapterResponse,SessionPoolConfig,RetryConfig,RequestContext
-from .fp import FP
-from .html import Html
-
+# 05-19-16-20-00
 import re
-def curl_to_requests(curl_str: str) -> tuple[str, dict, dict]:
-    """
-    解析curl命令，提取 url、headers、cookies
-    兼容：浏览器复制的 curl、单引号/双引号、--header / -H、--cookie / -b、多行curl
-    :param curl_str: 完整curl字符串
-    :return: (url, headers_dict, cookies_dict)
-    """
-    # 统一清理换行、多余空格，避免多行curl出错
-    curl_str = re.sub(r'\s+', ' ', curl_str.strip())
+from typing import TYPE_CHECKING
 
-    # 1. 提取 URL（兼容单引号/双引号/无引号）
-    url_pattern = re.compile(r'curl\s+(?:[\'"]?)(.*?)(?:[\'"]?)(?:\s|$)', re.I)
+from ljp_page._core._lazy_import import bind_lazy_exports
+
+if TYPE_CHECKING:
+    from .base import *  # noqa: F403
+    from .config import *  # noqa: F403
+    from .fp import *  # noqa: F403
+    from .html import *  # noqa: F403
+    from .session import *  # noqa: F403
+    from .sync_session import *  # noqa: F403
+
+
+def curl_to_requests(curl_str: str) -> tuple[str, dict, dict]:
+    """解析 curl 命令，提取 url、headers 与 cookies。"""
+
+    # 统一清理换行与多余空白，兼容浏览器复制的多行 curl。
+    curl_str = re.sub(r"\s+", " ", curl_str.strip())
+
+    url_pattern = re.compile(r"curl\s+(?:[\'\"]?)(.*?)(?:[\'\"]?)(?:\s|$)", re.I)
     url_match = url_pattern.search(curl_str)
     url = url_match.group(1).strip() if url_match else ""
 
-    # 2. 提取 Headers（支持 -H / --header）
     headers = {}
-    header_pattern = re.compile(r'-(?:H|header)\s*[\'\"](.*?)[\'\"]', re.I)
+    header_pattern = re.compile(r"-(?:H|header)\s*[\'\"](.*?)[\'\"]", re.I)
     header_items = header_pattern.findall(curl_str)
-
     for item in header_items:
         if ": " in item:
             key, value = item.split(": ", 1)
             headers[key.strip()] = value.strip()
 
-    # 3. 提取 Cookies（支持 -b / --cookie，同时支持从 header 里的 Cookie 字段提取）
     cookies = {}
-    # 优先从 -b 参数提取
-    cookie_pattern = re.compile(r'-(?:b|cookie)\s*[\'\"](.*?)[\'\"]', re.I)
+    cookie_pattern = re.compile(r"-(?:b|cookie)\s*[\'\"](.*?)[\'\"]", re.I)
     cookie_match = cookie_pattern.search(curl_str)
-
     if cookie_match:
         cookie_str = cookie_match.group(1).strip()
         for pair in cookie_str.split(";"):
@@ -45,7 +42,6 @@ def curl_to_requests(curl_str: str) -> tuple[str, dict, dict]:
                 ck, cv = pair.split("=", 1)
                 cookies[ck.strip()] = cv.strip()
 
-    # 兼容：很多 curl 把 Cookie 放在 -H 里，这里自动补抓
     if "Cookie" in headers and not cookies:
         cookie_str = headers.pop("Cookie")
         for pair in cookie_str.split(";"):
@@ -57,17 +53,11 @@ def curl_to_requests(curl_str: str) -> tuple[str, dict, dict]:
     return url, headers, cookies
 
 
+_lazy_getattr, __all__ = bind_lazy_exports(__name__, __file__)
+__all__.append("curl_to_requests")
 
-__all__ = [
-    "AsyncSession",
-    'SyncSession',
-    'LjpConfig',
-    'LjpResponse',
-    "RequestContext",
-    'RetryConfig',
-    'AdapterResponse',
-    'SessionPoolConfig',
-    'Html',
-    'FP',
-    'curl_to_requests'
-]
+
+def __getattr__(name: str) -> object:
+    if name == "curl_to_requests":
+        return curl_to_requests
+    return _lazy_getattr(name)

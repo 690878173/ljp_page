@@ -1,6 +1,12 @@
-﻿# 04-01-20-08-00
-"""通用基类导出。"""
+# 05-19-16-20-00
+"""模块基类导出。"""
 
-from .module_base import AsyncModuleBase, ModuleBase, SyncModuleBase
+from typing import TYPE_CHECKING
 
-__all__ = ["AsyncModuleBase", "ModuleBase", "SyncModuleBase"]
+from ljp_page._core._lazy_import import bind_lazy_exports
+
+if TYPE_CHECKING:
+    from .module_base import *  # noqa: F403
+
+__getattr__, __all__ = bind_lazy_exports(__name__, __file__)
+

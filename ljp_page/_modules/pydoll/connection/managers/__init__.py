@@ -1,7 +1,10 @@
-from .commands_manager import CommandsManager
-from .events_manager import EventsManager
+# 05-19-16-20-00
+from typing import TYPE_CHECKING
 
-__all__ = [
-    'CommandsManager',
-    'EventsManager',
-]
+from ljp_page._core._lazy_import import bind_lazy_exports
+
+if TYPE_CHECKING:
+    from .commands_manager import *  # noqa: F403
+    from .events_manager import *  # noqa: F403
+
+__getattr__, __all__ = bind_lazy_exports(__name__, __file__)

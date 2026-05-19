@@ -1,8 +1,11 @@
-﻿# 04-01-20-08-00
-"""Playwright 模块导出。"""
+# 05-19-16-20-00
+from typing import TYPE_CHECKING
 
-from .base import PlaywrightModuleBase
-from .browser import Playwright
-from .config import PlaywrightConfig
+from ljp_page._core._lazy_import import bind_lazy_exports
 
-__all__ = ["Playwright", "PlaywrightConfig", "PlaywrightModuleBase"]
+if TYPE_CHECKING:
+    from .base import *  # noqa: F403
+    from .browser import *  # noqa: F403
+    from .config import *  # noqa: F403
+
+__getattr__, __all__ = bind_lazy_exports(__name__, __file__)

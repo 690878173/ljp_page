@@ -1,9 +1,11 @@
-# 03-26-21-03-00
-from .exc import LJPExc
-from .task import BindTask, Task
+# 05-19-16-20-00
+from typing import TYPE_CHECKING
 
-__all__ = [
-    "BindTask",
-    "LJPExc",
-    "Task",
-]
+from ljp_page._core._lazy_import import bind_lazy_exports
+
+if TYPE_CHECKING:
+    from .exc import *  # noqa: F403
+    from .task import *  # noqa: F403
+
+__getattr__, __all__ = bind_lazy_exports(__name__, __file__)
+

@@ -1,15 +1,12 @@
-from .browser_options_manager import (
-    ChromiumOptionsManager,
-)
-from .browser_process_manager import (
-    BrowserProcessManager,
-)
-from .proxy_manager import ProxyManager
-from .temp_dir_manager import TempDirectoryManager
+# 05-19-16-20-00
+from typing import TYPE_CHECKING
 
-__all__ = [
-    'ChromiumOptionsManager',
-    'BrowserProcessManager',
-    'ProxyManager',
-    'TempDirectoryManager',
-]
+from ljp_page._core._lazy_import import bind_lazy_exports
+
+if TYPE_CHECKING:
+    from .browser_options_manager import *  # noqa: F403
+    from .browser_process_manager import *  # noqa: F403
+    from .proxy_manager import *  # noqa: F403
+    from .temp_dir_manager import *  # noqa: F403
+
+__getattr__, __all__ = bind_lazy_exports(__name__, __file__)

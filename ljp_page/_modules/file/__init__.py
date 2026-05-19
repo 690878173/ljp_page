@@ -1,4 +1,9 @@
 
-from .file_manager import Directory, FileHandler, ManagedAsyncFile
+from typing import TYPE_CHECKING
 
-__all__ = ["Directory", "FileHandler", "ManagedAsyncFile"]
+from ljp_page._core._lazy_import import bind_lazy_exports
+
+if TYPE_CHECKING:
+    from .file_manager import *  # noqa: F403
+
+__getattr__, __all__ = bind_lazy_exports(__name__, __file__)

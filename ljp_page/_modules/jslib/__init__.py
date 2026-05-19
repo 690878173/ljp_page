@@ -1,7 +1,10 @@
-﻿# 04-01-20-08-00
-"""JS 模块导出。"""
+# 05-19-16-20-00
+from typing import TYPE_CHECKING
 
-from .config import JsRuntimeConfig
-from .js_handler import Js
+from ljp_page._core._lazy_import import bind_lazy_exports
 
-__all__ = ["Js", "JsRuntimeConfig"]
+if TYPE_CHECKING:
+    from .config import *  # noqa: F403
+    from .js_handler import *  # noqa: F403
+
+__getattr__, __all__ = bind_lazy_exports(__name__, __file__)

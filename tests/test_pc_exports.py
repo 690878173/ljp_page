@@ -2,9 +2,9 @@
 import json
 
 from ljp_page.pc import Mode, PcConfig
-from ljp_page.config import RetryConfig,TimeoutConfig,ProxyConfig,SessionPoolConfig
+from ljp_page.config import RetryConfig,TimeoutConfig
 from ljp_page.pc import Xs
-from ljp_page.request import RequestConfig,LjpConfig
+from ljp_page.pc.request import RequestConfig,LjpConfig
 from ljp_page.logger import LogConfig
 
 
