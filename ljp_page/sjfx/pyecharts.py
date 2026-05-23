@@ -3,10 +3,10 @@
 
 from typing import TYPE_CHECKING
 
-from ljp_page._core._lazy_import import proxy_module_exports
+from ljp_page._core.utils._lazy_import import proxy_module_exports
 
 if TYPE_CHECKING:
-    from ljp_page._data_analysis.visualization.pyecharts import Pyecharts as Pyecharts
+    pass
 
 __getattr__, __all__ = proxy_module_exports(
     "ljp_page._data_analysis.visualization.pyecharts",

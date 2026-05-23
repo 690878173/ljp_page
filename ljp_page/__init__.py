@@ -1,7 +1,7 @@
 # 05-19-16-20-00
 from typing import TYPE_CHECKING
 
-from ljp_page._core._lazy_import import make_submodule_getattr
+from ljp_page._core.utils.lazy_import import make_submodule_getattr
 
 if TYPE_CHECKING:
     from . import config as config

@@ -1,10 +1,10 @@
 # 05-19-16-20-00
 from typing import TYPE_CHECKING
 
-from ljp_page._core._lazy_import import proxy_module_exports
+from ljp_page._core.utils.lazy_import import proxy_module_exports
 
 if TYPE_CHECKING:
-    from ljp_page._core._exceptions import ALL_EXCEPTIONS as ALL_EXCEPTIONS
+    from ljp_page._core.exceptions import ALL_EXCEPTIONS as ALL_EXCEPTIONS
     from ljp_page._core._exceptions import CaptchaException as CaptchaException
     from ljp_page._core._exceptions import ConfigError as ConfigError
     from ljp_page._core._exceptions import EncodingException as EncodingException
@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from ljp_page._core._exceptions import Yes as Yes
 
 __getattr__, __all__ = proxy_module_exports(
-    "ljp_page._core._exceptions",
+    "ljp_page._core.exceptions",
     [
         "ALL_EXCEPTIONS",
         "CaptchaException",

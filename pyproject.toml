@@ -43,6 +43,7 @@ dependencies = [
     "websockets>=16.0",
     "ddddocr>=1.6.1",
     "pydantic>=2.13.3",
+    "tls-client>=1.0.1",
 ]
 
 [project.optional-dependencies]
