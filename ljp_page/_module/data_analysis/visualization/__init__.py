@@ -3,7 +3,7 @@
 
 from typing import TYPE_CHECKING
 
-from ljp_page._core.utils._lazy_import import bind_lazy_exports
+from ljp_page._core.utils.lazy_import import bind_lazy_exports
 
 if TYPE_CHECKING:
     from .matplotlib import *  # noqa: F403

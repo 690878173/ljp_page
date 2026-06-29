@@ -285,7 +285,7 @@ class Directory(_DirectoryBase):
 
 
 class ManagedAsyncFile(Ljp_BaseClass_Logger):
-    """可自行管理生命周期的异步文件对象。"""
+    """自行管理生命周期的异步文件对象。"""
 
     def __init__(
         self,

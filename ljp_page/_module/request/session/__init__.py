@@ -5,6 +5,8 @@ from ljp_page._core.utils.lazy_import import bind_lazy_exports
 
 if TYPE_CHECKING:
     from .base import *  # noqa: F403
+    from .session import ASession
+    from .sync_session import SyncSession
 
 
 def curl_to_requests(curl_str: str) -> tuple[str, dict, dict]:

@@ -63,7 +63,7 @@ class Ys(BasePc):
         if not response:
             return []
 
-        parsed = await self.parser.parse_html(self.parse_p1, response, page_url)
+        parsed = await self.parser_manager.parse_html(self.parse_p1, response, page_url)
         return self._coerce_page_items(parsed)
 
     async def p2_work(self, p2_id: Any) -> None:
@@ -204,14 +204,14 @@ class Ys(BasePc):
             in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
         ]
         if accepts_args or len(positional) >= 3:
-            return await self.parser.parse_html(self.parse_p2, html_str, detail_url, video_id)
-        return await self.parser.parse_html(self.parse_p2, html_str, detail_url)
+            return await self.parser_manager.parse_html(self.parse_p2, html_str, detail_url, video_id)
+        return await self.parser_manager.parse_html(self.parse_p2, html_str, detail_url)
 
     async def get_real_m3u8_url(self, episode_page_url: str) -> str | None:
         if not episode_page_url:
             return None
         response = await self.req.get(self.session, self.config.format_p3_url(episode_page_url))
-        parsed = await self.parser.parse_html(self.parse_p3, response.text, episode_page_url)
+        parsed = await self.parser_manager.parse_html(self.parse_p3, response.text, episode_page_url)
         return self._extract_m3u8_url(parsed)
 
     @staticmethod

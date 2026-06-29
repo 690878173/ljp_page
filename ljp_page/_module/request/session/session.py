@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 
 import asyncio
@@ -9,6 +10,7 @@ import aiohttp
 
 from ljp_page._module.request.session.base import AsyncRequestModuleBase
 from ljp_page._module.request.session.config import AdapterResponse, LjpConfig, LjpResponse, RequestContext
+from ljp_page._module.request.verification import AsyncVerificationGate, VerificationContext
 from ljp_page._core.base import Ljp_BaseClass_Logger
 from ljp_page.logger import logger
 from ljp_page._core.utils.config import SessionPoolConfig
@@ -230,7 +232,7 @@ class AsyncSession(AsyncRequestModuleBase):
         delay = max(0.0, self.config.request.request_delay)
 
 
-        @retry(max_retries,delay=delay)
+        @retry(max_retries=max_retries,delay=delay)
         async def _send(*a, **kw):
 
             retry_index = kw[Constants.ATTEMPT]
@@ -289,14 +291,73 @@ class ASession(Ljp_BaseClass_Logger):
         self.logger = logger
         self.config = config if config else LjpConfig(sessionpool=SessionPoolConfig(max_session=1))
         self.session_queue = asyncio.Queue()
+        self._sessions: list[AsyncSession] = []
+        self._init_lock = asyncio.Lock()
         self.init_mask = False
+        self.verification_gate = AsyncVerificationGate(
+            result_applier=self.apply_verification_result,
+            checker=None,
+            handler=None
+        )
+
+    @property
+    def headers(self) -> dict[str, str]:
+        return deepcopy(self.config.request.headers)
+
+    @headers.setter
+    def headers(self, values: Mapping[str, str]) -> None:
+        self.config.request.headers = dict(values)
+        for session in self._sessions:
+            session.headers = values
+
+    @property
+    def cookies(self) -> dict[str, str]:
+        return deepcopy(self.config.request.cookies)
+
+    @cookies.setter
+    def cookies(self, values: Mapping[str, str]) -> None:
+        self.config.request.cookies = dict(values)
+        for session in self._sessions:
+            session.cookies = values
+
+    def update_headers(self, values: Mapping[str, str]) -> None:
+        self.config.request.headers.update(dict(values))
+        for session in self._sessions:
+            session.update_headers(values)
+
+    def update_cookies(self, values: Mapping[str, str]) -> None:
+        self.config.request.cookies.update(dict(values))
+        for session in self._sessions:
+            session.update_cookies(values)
+
+    def clear_cookies(self) -> None:
+        self.config.request.cookies.clear()
+        for session in self._sessions:
+            session.clear_cookies()
+
+    def apply_verification_result(self, result: Any, context: VerificationContext | None = None) -> None:
+        """应用验证函数返回的会话状态，例如 cookies、headers。"""
+
+        if not isinstance(result, Mapping):
+            return
+        headers = result.get("headers")
+        cookies = result.get("cookies")
+        if headers:
+            self.update_headers(headers)
+        if cookies:
+            self.update_cookies(cookies)
 
 
     async def _init(self):
         if not self.init_mask:
-            for _ in range(self.config.sessionpool.max_session):
-                self.session_queue.put_nowait(AsyncSession(config=self.config, logger=self.logger))
-            self.init_mask = True
+            async with self._init_lock:
+                if self.init_mask:
+                    return
+                for _ in range(self.config.sessionpool.max_session):
+                    session = AsyncSession(config=self.config, logger=self.logger)
+                    self._sessions.append(session)
+                    self.session_queue.put_nowait(session)
+                self.init_mask = True
 
     async def _get_req_session(self) -> AsyncSession:
         if not self.init_mask:
@@ -305,13 +366,46 @@ class ASession(Ljp_BaseClass_Logger):
         await self.session_queue.put(session)
         return session
 
+    async def request(
+        self,
+        method: str,
+        url: str,
+        *,
+        session=None,
+        verify_response: bool = True,
+        verify_max_retries: int | None = None,
+        **kwargs: Any,
+    ) -> LjpResponse:
+        request_kwargs = dict(kwargs)
+        current_session: dict[str, AsyncSession] = {}
 
+        async def send() -> LjpResponse:
+            request_session = session if session is not None else await self._get_req_session()
+            current_session["value"] = request_session
+            return await request_session.request(method, url, **request_kwargs)
 
+        def build_context(
+            response: LjpResponse,
+            verify_attempt: int,
+            version: int,
+        ) -> VerificationContext:
+            return VerificationContext(
+                owner=self,
+                session=current_session["value"],
+                response=response,
+                method=method.upper(),
+                url=url,
+                request_kwargs=deepcopy(request_kwargs),
+                verify_attempt=verify_attempt,
+                version=version,
+            )
 
-    async def request(self, method: str, url: str,*,session, **kwargs: Any) -> LjpResponse:
-        if session is None:
-            session = await self._get_req_session()
-        return await session.request(method, url, **kwargs)
+        return await self.verification_gate.run(
+            send,
+            context_factory=build_context,
+            verify_response=verify_response,
+            max_retries=verify_max_retries,
+        )
 
 
     async def get(self, url: str,*,session = None, **kwargs: Any) -> LjpResponse:
@@ -327,8 +421,18 @@ class ASession(Ljp_BaseClass_Logger):
         return await self.request("DELETE", url,session=session, **kwargs)
 
     async def close(self) -> None:
-        while not self.session_queue.empty():
-            session = await self.session_queue.get()
+        for session in self._sessions:
             await session.close()
+        self._sessions.clear()
+        while not self.session_queue.empty():
+            await self.session_queue.get()
+        self.init_mask = False
 
-__all__ = ["AsyncSession","ASession"]
+    def __repr__(self) -> str:
+        full_class_name = f"{self.__module__}.{self.__class__.__name__}"
+        return f"<{full_class_name}>"
+
+__all__ = [
+    "AsyncSession",
+    "ASession",
+]

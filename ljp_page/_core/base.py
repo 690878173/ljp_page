@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 from ljp_page._core.logger import DEFAULT_LEVEL_ALIASES
-from .logger.logger import logger
+from .logger import logger
 class Ljp_BaseClass_Logger:
 
     def __init__(self):
@@ -51,6 +51,11 @@ class Ljp_BaseClass_Logger:
 
     def critical(self, message: Any, f_name: str = "") -> None:
         self._log(DEFAULT_LEVEL_ALIASES.get('critical'), message, f_name)
+
+    def __str__(self) -> str:
+        # 获取 完整模块名 + 类名
+        full_class_name = f"{self.__module__}.{self.__class__.__name__}"
+        return f"<{full_class_name}>"
 
 __all__ = ['Ljp_BaseClass_Logger']
 

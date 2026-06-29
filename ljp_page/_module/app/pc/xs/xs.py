@@ -3,9 +3,9 @@ from __future__ import annotations
 import asyncio
 import inspect
 import re
+from abc import abstractmethod, ABC
 from pathlib import Path
 from typing import Any
-
 
 from ljp_page._core.base import Ljp_BaseClass_Logger
 from ljp_page._core.exceptions import HtmlParseError, MeetCheckError, No, Notfound
@@ -15,6 +15,7 @@ from ljp_page._module.request.session import LjpResponse
 from ljp_page._module.app.pc.base import P1Result, P2Item, P2Result, P3Item
 from ljp_page._module.app.pc.base import BasePc
 from ljp_page._core.utils.other import f_mark
+
 
 class XsManager(Ljp_BaseClass_Logger):
     DOWNLOAD_SUFFIX = ".downloading.txt"
@@ -40,12 +41,12 @@ class XsManager(Ljp_BaseClass_Logger):
     ]
 
     def __init__(
-        self,
-        pc: Any,
-        data: P2Item,
-        file_handle: ManagedAsyncFile,
-        final_file_path: str | Path,
-        logger: Any,
+            self,
+            pc: Any,
+            data: P2Item,
+            file_handle: ManagedAsyncFile,
+            final_file_path: str | Path,
+            logger: Any,
     ) -> None:
         super().__init__()
         self.set_logger(logger)
@@ -240,6 +241,7 @@ class XsManager(Ljp_BaseClass_Logger):
             lines[i] = lines[i].strip()
 
         return "\n".join(lines)
+
     @staticmethod
     def sanitize_filename(title: str) -> str:
         return re.sub(r'[\\/:*?"<>|]', "_", title or "未命名小说")
@@ -252,11 +254,22 @@ class XsManager(Ljp_BaseClass_Logger):
     def get_download_file_path(cls, title: str) -> str:
         return f"{title}{cls.DOWNLOAD_SUFFIX}"
 
-class Xs(BasePc):
+
+class Xs(BasePc,ABC):
+
+    @abstractmethod
+    async def fp_do(self, session, url, *args, **kwargs):
+        pass
+
+    @abstractmethod
+    async def check_meet_fp(self, res) -> bool:
+        return False
+
     def __init__(self, config, ui=None):
         super().__init__(config, ui)
 
     def get_manager(self) -> type[XsManager]:
+        self.manager = XsManager
         return XsManager
 
     def parse_p1(self, response: LjpResponse, url: str) -> P1Result:
@@ -268,21 +281,21 @@ class Xs(BasePc):
     def parse_p3(self, res_html: str, url: str) -> P3Item:
         raise NotImplementedError("需要继承实现 parse_p3")
 
-    @f_mark('format_p1,请求和解析，返回P1res的items，在p1_work_loop中被调用')
-    async def _p1_work(self, p1_id: Any) -> list[Any]:
+    @f_mark('format_p1,请求和解析，返回P1res，在p1_work_loop中被调用')
+    async def get_p1_result(self, p1_id: str) -> P1Result:
         if not self.config.p1_url:
-            return [p1_id]
+            return P1Result(items=[Xs.P1Item(url=p1_id, name='')])
 
         page_url = self.config.format_p1_url(p1_id)
 
         response = await self.req.get(url=page_url)
         if not response:
-            return []
+            return P1Result()
 
-        parsed = await self.parser.parse_html(self.parse_p1, response, page_url)
+        parsed = await self.parser_manager.parse_html(self.parse_p1, response, page_url)
         if not isinstance(parsed, P1Result):
             raise TypeError("parse_p1 需要返回 P1Result")
-        return parsed.items
+        return parsed
 
     @f_mark('转发p3到download')
     async def _p3_work(self, p2_result):
@@ -297,11 +310,12 @@ class Xs(BasePc):
             self.error(f"p2_work 任务出错:: {exc}")
 
     @f_mark('format_p2,请求和解析，返回P2res')
-    async def _p2_work(self, p2_id: Any):
+    async def get_p2_result(self,p1_item) -> P2Result | None:
         try:
             if not self.config.p2_url:
                 raise ValueError("config.p2_url 参数未设置")
-            p2_id = getattr(p2_id, "url", p2_id)
+
+            p2_id = getattr(p1_item, "url", p1_item)
             base_url = self.config.format_p2_url(p2_id)
             current_url = base_url
 
@@ -317,11 +331,11 @@ class Xs(BasePc):
 
                 try:
                     response = await self.req.get(url=current_url)
-                    html_str = response.text
+                    html_str = response
                     if not html_str:
                         raise No(f"p2 响应为空: id={p2_id}, url={current_url}")
 
-                    parsed = await self.parser.parse_html(self.parse_p2, html_str, current_url)
+                    parsed = await self.parser_manager.parse_html(self.parse_p2, html_str, current_url)
                     if not isinstance(parsed, P2Result):
                         raise TypeError("parse_p2 需要返回 P2Result")
                     if not parsed.items:
@@ -345,9 +359,9 @@ class Xs(BasePc):
                 except MeetCheckError:
                     continue
                 except Exception as exc:
-                    raise No(f"获取 p2 出错: id={p2_id}, url={current_url}", e=exc)
+                    raise No(f"获取 p2 出错: id={p2_id}, url={current_url}") from exc
 
-            self._reindex_p3_items(all_p3s, title) #重置索引名称
+            self._reindex_p3_items(all_p3s, title)  # 重置索引名称
             res = P2Result(
                 items=[
                     P2Item(
@@ -360,10 +374,12 @@ class Xs(BasePc):
                 ]
             )
             await self._p3_work(res)
+            return res
+
         except Notfound as exc:
-            self.warning(f"资源不存在 id={p2_id}: {exc}")
+            self.warning(f"资源不存在 id={p1_item}: {exc}")
         except Exception as exc:
-            self.error(f"p2 任务出错: id={p2_id}: {exc}")
+            self.error(f"p2 任务出错: id={p1_item}: {exc}")
 
     @f_mark('整体章节调度，初始化管理器')
     async def download(self, p2_result: P2Result) -> None:
@@ -375,14 +391,14 @@ class Xs(BasePc):
                     continue
                 final_name = self.manager.get_file_path(safe_title)
                 download_name = self.manager.get_download_file_path(safe_title)
-                finished_path = self.file_hd.directory.find_file_path(final_name)
+                finished_path = self.file_manager.directory.find_file_path(final_name)
                 if finished_path is not None:
                     self.info(f"检测到完整文件，跳过下载: {finished_path}")
                     continue
 
-                download_path = self.file_hd.directory.find_file_path(download_name)
+                download_path = self.file_manager.directory.find_file_path(download_name)
                 if download_path is None:
-                    download_path = self.file_hd.directory.get_file_path(download_name)
+                    download_path = self.file_manager.directory.get_file_path(download_name)
                 final_path = download_path.with_name(final_name)
                 file_handle = ManagedAsyncFile(
                     download_path,
@@ -420,15 +436,8 @@ class Xs(BasePc):
             self.error(f"下载流程失败: {exc}")
             raise No("下载流程失败") from exc
 
-
     @f_mark('章节下载，添加到管理器')
-    async def _parse_p3_info(
-        self,
-        p3_id: int,
-        p3: P3Item,
-        p2_name: str,
-        manager: XsManager,
-    ) -> None:
+    async def _parse_p3_info(self,p3_id: int,p3: P3Item,p2_name: str,manager: XsManager,) -> None:
         p3.url = self.config.format_p3_url(p3.url)
         current_url = p3.url
         chapter_title = p3.name
@@ -441,12 +450,12 @@ class Xs(BasePc):
 
             try:
                 response = await self.req.get(url=current_url)
-                html_str = response.text
+                html_str = response
                 if not html_str:
                     self.warning(f"p3 响应为空: id={p3_id}, url={current_url}")
                     break
 
-                parsed = await self.parser.parse_html(self.parse_p3, html_str, current_url)
+                parsed = await self.parser_manager.parse_html(self.parse_p3, html_str, current_url)
                 parsed_p3 = self._coerce_p3_item(parsed, fallback=p3, p2_name=p2_name, p3_id=p3_id)
                 if parsed_p3.name:
                     chapter_title = parsed_p3.name
@@ -490,7 +499,7 @@ class Xs(BasePc):
         return p3_items
 
     @f_mark('将输入转化为标准的P3item')
-    def _coerce_p3_item(self,item: Any,*,fallback: P3Item | None,p2_name: str,p3_id: int,) -> P3Item:
+    def _coerce_p3_item(self, item: Any, *, fallback: P3Item | None, p2_name: str, p3_id: int, ) -> P3Item:
         if isinstance(item, P3Item):
             if not item.id:
                 item.id = p3_id

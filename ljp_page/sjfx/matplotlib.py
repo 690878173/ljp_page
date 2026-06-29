@@ -1,24 +1,7 @@
-# 05-19-16-20-00
-"""Public matplotlib helper exports."""
-
 from typing import TYPE_CHECKING
 
-from ljp_page._core.utils._lazy_import import proxy_module_exports
+from ljp_page._core.utils.lazy_import import proxy_module_exports,bind_lazy_exports
+from ljp_page._module.data_analysis.visualization import __all__,__getattr__
 
 if TYPE_CHECKING:
-    pass
-
-__getattr__, __all__ = proxy_module_exports(
-    "ljp_page._data_analysis.visualization.matplotlib",
-    [
-        "ArrayLike",
-        "FigureManager",
-        "Matplotlib",
-        "Number",
-        "Plotter",
-        "QuickPlot",
-        "StyleManager",
-        "ThemeConfig",
-        "ThemeRegistry",
-    ],
-)
+    from ljp_page._module.data_analysis.visualization import *

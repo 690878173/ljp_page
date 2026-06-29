@@ -13,7 +13,6 @@ from PyQt6.QtWidgets import QMainWindow, QApplication, QHeaderView, QAbstractIte
 
 from ljp_page.ui.tableview.xs_tableview import xs_tableview_Delegate, xs_table_model
 
-# 如果有类型检查需求，可以使用 TYPE_CHECKING 避免循环导入
 if TYPE_CHECKING:
     pass
 

@@ -28,7 +28,6 @@ class ThreadBackend(BaseBackend):
         self.pool = pool or ThreadPool(
             max_workers=max_workers,
             thread_name_prefix=thread_name_prefix,
-            logger=logger,
         )
 
     def submit(self, bound_task: BindTask, config: TaskSubmitConfig) -> Future[Any]:

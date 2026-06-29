@@ -44,6 +44,7 @@ dependencies = [
     "ddddocr>=1.6.1",
     "pydantic>=2.13.3",
     "tls-client>=1.0.1",
+    "dotenv>=0.9.9",
 ]
 
 [project.optional-dependencies]

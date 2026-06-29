@@ -56,3 +56,18 @@ res_data/
 # Environment variables
 .env
 .env.local
+/tests/data_any/ml_plot.py
+/tests/ms/ms.py
+/tests/pc/dybz/t1.py
+/tests/pc/dybz/t3.py
+/tests/pc/edge/test.png
+/tests/pc/edge/ts_edge.py
+/tests/pc/session/t_session.py
+/tests/pc/session/ts_session_t1.py
+/tests/pc/ts_playwright/11.json
+/tests/pc/ts_playwright/ts_playwright.py
+/tests/t2.py
+/tests/test_async_session_verification.py
+/tests/test_new_pc_xs_fake_request.py
+/tests/test_pydoll_pc_fake_request.py
+/tests/test_pydoll_pc_xs_tab_pool.py

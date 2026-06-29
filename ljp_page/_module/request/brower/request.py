@@ -166,6 +166,14 @@ class Request:
             - 自动包含浏览器cookie
             - CORS 策略由浏览器强制执行
             - 身份验证标头从浏览器会话中保留"""
+        check_fp = bool(kwargs.pop("check_fp", True))
+        verify_response = bool(kwargs.pop("verify_response", check_fp))
+        verify_max_retries = kwargs.pop("verify_max_retries", None)
+        cf_refresh = bool(kwargs.pop("cf_refresh", True))
+        cf_time_to_wait_captcha = kwargs.pop("cf_time_to_wait_captcha", 5)
+        cf_max_retries = kwargs.pop("cf_max_retries", 3)
+        cf_wait_after_click = kwargs.pop("cf_wait_after_click", 30)
+
         final_url = self._build_url_with_params(url, params)
         options = self._build_request_options(method, headers, json, data, **kwargs)
         # logger.info(f'Executing request: method={method.upper()}, url={final_url}')
@@ -174,7 +182,35 @@ class Request:
             f'headers={bool(headers)}, json={json is not None}, data={data is not None}'
         )
         try:
-            result = await self._execute_fetch_request(final_url, options)
+            async def send():
+                return await self._execute_fetch_request(final_url, options)
+
+            verification_gate = getattr(self.page, "cdp_verification_gate", None)
+            if verification_gate is None:
+                result = await send()
+            else:
+                # CDP/fetch 请求统一走验证门闸，命中验证页后由页面完成验证再重发当前请求。
+                result = await verification_gate.run(
+                    send,
+                    context={
+                        "page": self.page,
+                        "request": self,
+                        "method": method.upper(),
+                        "url": url,
+                        "final_url": final_url,
+                        "params": params,
+                        "options": options,
+                        "cf_refresh": cf_refresh,
+                        "cf_time_to_wait_captcha": cf_time_to_wait_captcha,
+                        "cf_max_retries": cf_max_retries,
+                        "cf_wait_after_click": cf_wait_after_click,
+                    },
+                    verify_response=verify_response,
+                    max_retries=verify_max_retries,
+                )
+
+            if isinstance(result, dict) and (result.get("error") or "content" not in result):
+                raise HTTP_Fetch_error(str(result.get("error") or "响应缺少 content 字段"))
             return result
 
         except Exception as exc:

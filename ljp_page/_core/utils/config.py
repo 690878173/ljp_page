@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, TYPE_CHECKING
-from .retry.retry import RetryConfig
+from .retry.ljp_retry import RetryConfig
 
 if TYPE_CHECKING:
     import aiohttp

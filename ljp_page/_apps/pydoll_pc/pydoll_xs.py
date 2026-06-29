@@ -57,7 +57,7 @@ class Xs(_Xs):
         headers = self.req.browser.hd if self.req.browser is not None else {}
         return PydollResponse(text=html_text, url=current_url, headers=headers)
 
-    async def _p1_work(self, p1_id: Any) -> list[Any]:
+    async def get_p1_result(self, p1_id: Any) -> list[Any]:
         if not self.config.p1_url:
             return [p1_id]
 
@@ -67,7 +67,7 @@ class Xs(_Xs):
         if not response:
             return []
 
-        parsed = await self.parser.parse_html(self.parse_p1, response, page_url)
+        parsed = await self.parser_manager.parse_html(self.parse_p1, response, page_url)
         if not isinstance(parsed, P1Result):
             raise TypeError("parse_p1 需要返回 P1Result")
         return parsed.items
@@ -96,7 +96,7 @@ class Xs(_Xs):
                 if not html_str:
                     raise No(f"p2 响应为空: id={p2_id}, url={current_url}")
 
-                parsed = await self.parser.parse_html(self.parse_p2, html_str, current_url)
+                parsed = await self.parser_manager.parse_html(self.parse_p2, html_str, current_url)
                 if not isinstance(parsed, P2Result):
                     raise TypeError("parse_p2 需要返回 P2Result")
                 if not parsed.items:
@@ -159,7 +159,7 @@ class Xs(_Xs):
                     self.warning(f"p3 响应为空: id={p3_id}, url={current_url}")
                     break
 
-                parsed = await self.parser.parse_html(self.parse_p3, html_str, current_url)
+                parsed = await self.parser_manager.parse_html(self.parse_p3, html_str, current_url)
                 parsed_p3 = self._coerce_p3_item(parsed, fallback=p3, p2_name=p2_name, p3_id=p3_id)
                 if parsed_p3.name:
                     chapter_title = parsed_p3.name

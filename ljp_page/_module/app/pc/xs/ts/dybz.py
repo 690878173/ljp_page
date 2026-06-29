@@ -4,22 +4,24 @@ from pathlib import Path
 from urllib.parse import urljoin
 
 from ljp_page._core.exceptions import LjpBaseException
+from ljp_page._module.app.pc.base import Config
 from ljp_page._module.request.html import Html
 from ljp_page._module.app.pc.base.model import P1Result
 from ljp_page._module.app.pc.xs.xs import Xs
 from ljp_page.logger import logger
-from ljp_page.pc.edge.pydoll import cf
 
 from ljp_page._module.ocr import Ocr
+
 ocr = Ocr()
 
-from ljp_page._module.request.brower.pydoll import Edge
+from ljp_page._module.request.brower.playwright import Playwright
 
-class Md(Xs):
+from ljp_page._module.app.pc.base.manager.request_manager import PC_Base_Request
 
 
-    def __init__(self,config,ui=None):
-        super().__init__(config,ui)
+class Pc_Ocr:
+    def __init__(self,pc):
+        self.pc = pc
         self.ocr_cache_path = Path("res/res_data/ocr_cache.json")
         self.ocr_cache_path.parent.mkdir(parents=True, exist_ok=True)
         self.ocr_img_dic_count = 0
@@ -29,21 +31,12 @@ class Md(Xs):
             self.ocr_cache = {}
 
         self.ocr_cache_lock = asyncio.Lock()
-        self.edge = Edge()
-
 
     def check_img(self,url):
         if url in self.ocr_cache:
             return self.ocr_cache[url]
         else:
             return False
-
-    def check_name(self,name):
-        no_in_ls = ['绿', '近代现代', 'GL百合','[穿越重生]','[BL同人]','[古代架空]']
-        for no in no_in_ls:
-            if no in name:
-                return None
-        return name
 
     def ocr_img(self, img_by):
 
@@ -53,6 +46,7 @@ class Md(Xs):
         if word in confuse_list:
             word = "丁"
         return word
+
 
     async def get_content_by_br(self, node):
         parts = []
@@ -77,9 +71,9 @@ class Md(Xs):
                     if self.check_img(img_url):
                         line.append(self.check_img(img_url))
                     else:
-                        im_url = self.config.base_url + img_url
+                        im_url = self.pc.config.base_url + img_url
 
-                        handle = asyncio.create_task(self.get(self.session, im_url))
+                        handle = asyncio.create_task(self.pc.req.get_png(im_url))
 
                         line.append([handle,img_url])
 
@@ -103,7 +97,7 @@ class Md(Xs):
                 else:
                     try:
                         res = await item[0]
-                        text = self.ocr_img(res.content)
+                        text = self.ocr_img(res)
                         self.ocr_cache[item[1]] = text
                         print(f'添加：{item[1]}:{text}')
                         self.ocr_img_dic_count += 1
@@ -114,7 +108,7 @@ class Md(Xs):
                             )
 
                     except Exception as e:
-                        self.warning(f"OCR 识别失败: {e}")
+                        print(f"OCR 识别失败: {e}")
                         text = "[图片]"
 
                     current_line.append(text)
@@ -123,6 +117,82 @@ class Md(Xs):
             result_lines.append("".join(current_line).strip())
 
         return "\n".join(line for line in result_lines if line is not None).replace('\n\n','\n')
+
+
+class Request(PC_Base_Request):
+
+    async def close(self):
+        while not self.page_queue.empty():
+            try:
+                page = await self.page_queue.get()
+                await page.close()
+            except Exception as e:
+                print(e)
+                continue
+        await self.edge.close()
+
+    def __init__(self,own,config,logger=None):
+        self.edge = Playwright()
+        self.own = own
+
+        self.page_queue = asyncio.Queue()
+
+    async def init(self):
+        await self.edge.start()
+        page_ls = await self.edge.new_pages(4)
+        for page in page_ls:
+            await page.goto(self.own.config.base_url)
+            await page.cf()
+            self.page_queue.put_nowait(page)
+
+    async def get_page(self):
+        """轮询取得页面；普通 CDP 请求允许并发，验证刷新由门闸统一协调。"""
+
+        page = await self.page_queue.get()
+        await self.page_queue.put(page)
+        return page
+
+    async def get(self,url,**kwargs):
+        while True:
+            page = await self.get_page()
+            try:
+                res = await page.cdp_request.get(
+                    url,
+                    verify_max_retries=3,
+                    cf_time_to_wait_captcha=10,
+                )
+                content_bytes = bytes(res["content"])
+                return content_bytes.decode("gbk", errors="replace")
+            except Exception as e:
+                if "Execution context was destroyed" in str(e):
+                    print("✅ 捕获到页面跳转错误，已处理")
+                print(f"请求失败，等待后重试: {e}")
+            await asyncio.sleep(10)
+
+    async def get_png(self,url):
+        page = await self.get_page()
+        res = await page.cdp_request.get(
+            url,
+            verify_max_retries=3,
+            cf_time_to_wait_captcha=10,
+        )
+        return bytes(res["content"])
+
+class Md(Xs):
+    _Request_Manager = Request
+
+
+    def __init__(self,config,ui=None):
+        super().__init__(config,ui)
+        self.ocr = Pc_Ocr(self)
+
+    def check_name(self,name):
+        no_in_ls = ['绿', '近代现代', 'GL百合','[穿越重生]','[BL同人]','[古代架空]']
+        for no in no_in_ls:
+            if no in name:
+                self.warning(f'跳过->{name}')
+                return None
+        return name
 
     @staticmethod
     def _clean_text(text: str) -> str:
@@ -139,58 +209,19 @@ class Md(Xs):
     def _to_absolute(base: str, link: str) -> str:
         return urljoin(base, link)
 
-    async def before_run(self):
-        tab = await self.edge.start()
-        await tab.go_to(self.config.base_url)
-        await tab.refresh()
-        await tab.cf()
-        r_url = await tab.current_url
-        cookies = await tab.cookies
-        hd = self.edge.headers
-        # r_url, cookies, hd = await cf(self.config.base_url)
-        other = {'cf_chl_rc_ni':'1'}
-        self.session.cookies = cookies
-        # self.session.update_headers(other)
-        self.session.headers = hd
-        # self.session.update_headers({'referer':self.config.base_url})
-        self.info(f'初始化cookies')
-        print(f'原始cookies:{cookies}')
-        await self.edge.close()
-        return
-
-    async def after_run(self):
-        await self.edge.close()
-
-
     async def check_meet_fp(self, res):
         l = ['Just a moment...','请稍候…']
         for i in l:
             if i in res:
-                # print(f'触发反扒，响应结果:{res}')
                 return True
         return False
 
     async def fp_do(self,session,url,*args,**kwargs):
-        # self.edge = Edge()
-        # tab = await self.edge.new_tab(self.config.base_url)
-        # await tab.refresh()
-        # raw_cookies = session.cookies
-        # await tab.go_to(self.config.base_url)
-        # await tab.cf()
-        # r_url = await tab.current_url
-        # cookies = await tab.cookies
-        # hd = self.edge.headers
-        # # r_url, cookies, hd = await cf(self.config.base_url)
-        # session.cookies = cookies
-        # session.headers = hd
-        # # print(f'更新cookies:{cookies}')
-        # # print(f'原始cookies:{raw_cookies}')
-        # await self.edge.close()
         pass
 
     def parse_p1(self, res, url: str) -> P1Result:
         try:
-            res_html = res.text
+            res_html = res
             # print(res)
             # print(res.text)
             html = Html.drop_xml(res_html)
@@ -212,7 +243,7 @@ class Md(Xs):
                 items=items
             )
         except Exception as e:
-            raise LjpBaseException(message=f'出错', e=e)
+            raise LjpBaseException(message=f'出错') from e
 
     def parse_p2(self, res_html: str, url: str):
         try:
@@ -258,7 +289,7 @@ class Md(Xs):
                 next_url=next_url
             )
         except Exception as e:
-            raise LjpBaseException(message=f'出错',e=e)
+            raise LjpBaseException(message=f'出错') from e
 
     async def parse_p3(self, res_html: str, url: str):
         try:
@@ -270,25 +301,27 @@ class Md(Xs):
                 title = self._clean_text(title_nodes[0])
 
             content_nodes = html.xpath('//div[@class="page-content font-large"]/p')[0]
-            content = await self.get_content_by_br(content_nodes)
+            content = await self.ocr.get_content_by_br(content_nodes)
             # content = "\n".join(self._clean_text(i) for i in content_nodes if i)
-
+    
             next_rel = html.xpath('//center[@class="chapterPages"]/a[@class="curr"]/following-sibling::a[1]/@href')
             next_url = self._to_absolute(url, next_rel[0]) if next_rel else None
 
             return self.P3Item(url=url,name=title,content=content,next_url=next_url)
         except Exception as e:
             self.error(e)
-            raise LjpBaseException(message=f'出错', e=e)
+            raise LjpBaseException(message=f'出错') from e
 
 if __name__ == '__main__':
-    md = Md(config=Md.Config(mode='mode2',
-                             base_url='https://www.bz888888888.com',
-                             p1_url='https://www.bz888888888.com/shuku/0-size-0-{}.html',
-                             p2_url='https://www.bz888888888.com{}',
-                             p3_url='https://www.bz888888888.com{}',
-                             start_id=202,
-                             end_id=203,
+     md = Md(config=Md.Config(mode='mode2',
+                              save_path='./res',
+                             base_url='https://www.bz777777777.com',
+                             p1_url='https://www.bz777777777.com/shuku/0-size-0-{}.html',
+                             p2_url='https://www.bz777777777.com{}',
+                             p3_url='https://www.bz777777777.com{}',
+                             start_id=236,
+                             end_id=270
                              ))
-    md.logger = logger
-    md.run()
+                                # 已完成一半270
+     md.logger = logger
+     md.run()

@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 
 
 class AsyncBackend(BaseBackend):
-    """异步后端：复用旧版 Async。"""
+    """异步后端。"""
 
     mode_name = "async"
     backend_name = "async"

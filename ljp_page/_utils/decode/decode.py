@@ -4,7 +4,7 @@ from typing import Optional, Dict, Union, Literal
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
 
-# 定义支持的类型
+
 EncryptionMode = Literal['CBC', 'ECB', 'CFB', 'OFB', 'CTR', 'GCM']
 PaddingType = Literal['pkcs7', 'zero', 'none']
 EncodingType = Literal['utf-8', 'base64', 'hex', 'raw', 'gbk', 'latin-1']
@@ -328,7 +328,7 @@ def decrypt_vod_data(encrypted_hex: str, key_raw: str = "3863270olZElm") -> Opti
         return None
 
 if __name__ == '__main__':
-    # 测试代码
+
     aes = AESCipher()
     text = "Hello World! 你好世界！"
     key = "1234567812345678"
@@ -340,6 +340,4 @@ if __name__ == '__main__':
     # 解密
     dec = aes.decrypt(enc, key, mode='CBC', iv=key, data_encoding='hex')
     print(f"解密结果: {dec}")
-    
-    # 测试 vod logic
-    # 构造一个符合 vod 逻辑的假数据有点复杂，这里略过，仅确保代码无语法错误
+

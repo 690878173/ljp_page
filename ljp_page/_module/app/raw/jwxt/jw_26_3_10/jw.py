@@ -1,4 +1,3 @@
-# 04-30-11-08-00
 import base64
 import json
 import re
@@ -9,11 +8,10 @@ from lxml import etree
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-from ljp_page._modules.request import Requests
-
+from ljp_page._module.request.session import SyncSession as Requests
+from ljp_page._module.ocr.ocr import Ocr
 
 class JW:
-    """教务系统访问封装。"""
 
     def __init__(self, username, password):
         self.username = username
@@ -31,7 +29,8 @@ class JW:
 
     def out_init(self):
         self.req = Requests()
-        self.session = self.req.create_session()
+        self.session = self.req.ensure_session()
+        self.ocr = Ocr()
 
     def init_session(self):
         self.out_init()
@@ -45,6 +44,8 @@ class JW:
         self.session.mount("https://", HTTPAdapter(max_retries=retries))
 
     def url_get_host(self, url):
+        if not url:
+            return None
         return url.split("/")[2]
 
     def get_next_url(self, url, refer):
@@ -72,6 +73,9 @@ class JW:
     def login(self):
         refer = self.init_login()
         print("登录")
+        url = 'https://oa-443.v.hbfu.edu.cn/backstage/cas/captcha.jpg'
+        res = self.session.get(url, headers=self.headers, allow_redirects=False)
+        captcha = self.ocr.classification(res.content)
 
         def get_password(password):
             def qk(t: str, n: str, iv_value: str) -> str:
@@ -96,7 +100,7 @@ class JW:
             "execution": self.execution,
             "_eventId": "submit",
             "geolocation": "",
-            "captcha": "",
+            "captcha": captcha,
             "rememberMe": "false",
             "domain": self.url_get_host(url),
             "tenantId": "",
@@ -106,7 +110,7 @@ class JW:
         self.headers["Referer"] = refer
 
         response = self.session.post(url, data=data, headers=self.headers, allow_redirects=False)
-        next_url = response.headers["Location"]
+        next_url = response.headers.get("Location",'')
 
         self.headers["Host"] = self.url_get_host(next_url)
         self.headers["Referer"] = next_url
@@ -161,3 +165,13 @@ class JW:
         if not self.login_is:
             self.login()
         return self.session.cookies.get_dict()
+
+if __name__ == '__main__':
+    import os
+    from dotenv import load_dotenv
+
+    load_dotenv("env/jw.env")
+    jw = JW(username=os.getenv('jw_username'),password=os.getenv('jw_password'))
+    jw.login()
+
+

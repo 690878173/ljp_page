@@ -28,7 +28,7 @@ class Config:
 
     start_id: int = 1
     end_id: int = 5
-    id_ls: list[Any] | None = None
+    id_ls: list[Any] = None
 
     mode: str = ModeType.MODE1
     max_workers: int = 5
