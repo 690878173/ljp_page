@@ -1,5 +1,7 @@
-# 05-19-16-20-00
+
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    pass
+    from ljp_page._module.runtime import LJPExc
+
+from ljp_page._module.runtime import __all__,__getattr__

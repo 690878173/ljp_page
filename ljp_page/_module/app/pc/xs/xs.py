@@ -31,7 +31,7 @@ class XsManager(Ljp_BaseClass_Logger):
         r"^([\[\(].*?[\]\)]\s*)",
     ]
 
-    # 修复：全覆盖中文章节格式（第1章、第一章、1.、1、、一、、[VIP]）
+    # 全覆盖中文章节格式（第1章、第一章、1.、1、、一、、[VIP]）
     CHAPTER_PATTERNS = [
         re.compile(r"^(prologue|preface|epilogue)$", re.I),
         re.compile(r"^(?:\[?vip\]?\s*)?chapter\s*\d+", re.I),

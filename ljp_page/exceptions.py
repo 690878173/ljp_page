@@ -1,4 +1,4 @@
-# 05-19-16-20-00
+
 from typing import TYPE_CHECKING
 
 from ljp_page._core.utils.lazy_import import proxy_module_exports
@@ -24,27 +24,31 @@ if TYPE_CHECKING:
     from ljp_page._core._exceptions import TimeoutException as TimeoutException
     from ljp_page._core._exceptions import Yes as Yes
 
-__getattr__, __all__ = proxy_module_exports(
-    "ljp_page._core.exceptions",
-    [
-        "ALL_EXCEPTIONS",
-        "CaptchaException",
-        "ConfigError",
-        "LjpBaseException",
-        "LjpRequestException",
-        "MaxRetriesException",
-        "MeetCheckError",
-        "NetworkError",
-        "NetworkException",
-        "No",
-        "Notfound",
-        "ParseError",
-        "ProxyException",
-        "ResponseParseException",
-        "SSLException",
-        "TimeoutException",
-        "Yes",
-        "EncodingException",
-        "HTTPStatusException",
-    ],
-)
+# __getattr__, __all__ = proxy_module_exports(
+#
+#     "ljp_page._core.exceptions",
+#     [
+#         "ALL_EXCEPTIONS",
+#         "CaptchaException",
+#         "ConfigError",
+#         "LjpBaseException",
+#         "LjpRequestException",
+#         "MaxRetriesException",
+#         "MeetCheckError",
+#         "NetworkError",
+#         "NetworkException",
+#         "No",
+#         "Notfound",
+#         "ParseError",
+#         "ProxyException",
+#         "ResponseParseException",
+#         "SSLException",
+#         "TimeoutException",
+#         "Yes",
+#         "EncodingException",
+#         "HTTPStatusException",
+#     ],
+# )
+
+
+from ljp_page._core.exceptions import *

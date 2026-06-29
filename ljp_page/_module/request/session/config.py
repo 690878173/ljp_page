@@ -1,5 +1,6 @@
 import json
 import re
+import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -20,7 +21,7 @@ class RequestConfig:
     verify_ssl: bool = True
     allow_redirects: bool = True
     stream: bool = False
-    request_delay: float = 0.0
+    delay: float = 0.0
     trust_env: bool = True
     headers: dict[str, str] = field(
         default_factory=lambda: {"User-Agent": DEFAULT_USER_AGENT}
@@ -29,7 +30,13 @@ class RequestConfig:
     extra: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
-        self.request_delay = max(0.0, self.request_delay)
+        self.delay = max(0.0, self.delay)
+
+    def update_headers(self,headers):
+        self.headers.update(headers)
+
+    def update_cookies(self, cookies):
+        self.cookies.update(cookies)
 
 @dataclass
 class LjpConfig:
@@ -62,6 +69,21 @@ class RequestContext:
     json_data: Any = None
     extra: dict[str, Any] = field(default_factory=dict)
     attempt: int = 0
+
+    @classmethod
+    def resolve(cls,**request_kwargs) -> tuple[
+        dict[Any, Any] | Any, dict[Any, Any] | Any, Any, Any, Any, Any, Any, Any, Any]:
+        kw = dict(request_kwargs)
+        headers = kw.pop("headers", None) or {}
+        cookies = kw.pop("cookies", None) or {}
+        timeout = kw.pop("timeout", None)
+        proxy = kw.pop("proxy", None)
+        proxies = kw.pop("proxies", None)
+        params = kw.pop("params", None)
+        data = kw.pop("data", None)
+        json_data = kw.pop("json_data", None)
+        trace_id = kw.pop("trace_id", uuid.uuid4().hex)
+        return headers,cookies,timeout,proxy,proxies,params,data,json_data,trace_id
 
 
 @dataclass(frozen=True)

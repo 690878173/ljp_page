@@ -7,10 +7,10 @@ from typing import Optional, Any, Dict, List
 
 import aiofiles
 
-from ljp_page._core._base_class import Ljp_BaseClass
+from ljp_page._core.base import Ljp_BaseClass_Logger
 
 
-class _FileHandleBase(Ljp_BaseClass):
+class _FileHandleBase(Ljp_BaseClass_Logger):
     """
     文件句柄管理器基类 - 内部实现
 

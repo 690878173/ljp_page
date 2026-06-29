@@ -2,22 +2,20 @@ from __future__ import annotations
 
 import asyncio
 import threading
-import uuid
+
 from abc import abstractmethod, ABC
 from copy import deepcopy
 from typing import Any, Mapping
-from urllib.parse import urlparse
+
 
 import aiohttp
 import requests
 
 from ljp_page._core.base import Ljp_BaseClass_Logger
-from ljp_page._core.constants.request import Request_str
-from ljp_page._core.utils.config import TimeoutConfig
 from ljp_page._core.exceptions import NetworkException, TimeoutException
 from ljp_page._core.logger import Logger
 
-from .config import AdapterResponse, LjpConfig, LjpResponse, RequestContext
+from .config import AdapterResponse, LjpConfig, LjpResponse, RequestContext,RequestConfig
 
 
 
@@ -40,16 +38,7 @@ class RequestModuleBase(Ljp_BaseClass_Logger,ABC):
             self.config.request.headers = headers
 
     def _resolve_timeout(self, timeout: Any) -> tuple[float, float]:
-        if timeout is None:
-            return self.config.timeout.requests_timeout
-        if isinstance(timeout, TimeoutConfig):
-            return timeout.requests_timeout
-        if isinstance(timeout, (int, float)):
-            numeric = float(timeout)
-            return numeric, numeric
-        if isinstance(timeout, tuple) and len(timeout) == 2:
-            return float(timeout[0]), float(timeout[1])
-        raise TypeError(f"不支持的 timeout 类型: {type(timeout).__name__}")
+        return self.config.timeout.resolve(timeout)
 
     def _resolve_url(self, url: str) -> str:
         return url
@@ -60,14 +49,7 @@ class RequestModuleBase(Ljp_BaseClass_Logger,ABC):
         proxy: str | None,
         proxies: Mapping[str, str] | None,
     ) -> tuple[dict[str, str] | None, str | None]:
-        scheme = urlparse(url).scheme or "http"
-        if proxy:
-            return {scheme: proxy}, proxy
-        if proxies:
-            proxy_dict = dict(proxies)
-            return proxy_dict, proxy_dict.get(scheme)
-        proxy_dict = self.config.proxy.as_requests()
-        return proxy_dict, self.config.proxy.for_scheme(scheme)
+        return self.config.proxy.resolve(url,proxy,proxies)
 
     def _build_context(
         self,
@@ -79,30 +61,22 @@ class RequestModuleBase(Ljp_BaseClass_Logger,ABC):
         native_session: Any = None,
     ) -> RequestContext:
         request_kwargs = dict(kwargs)
-        custom_headers = request_kwargs.pop(Request_str.headers, None) or {}
-        custom_cookies = request_kwargs.pop("cookies", None) or {}
+        custom_headers,custom_cookies,timeout,proxy,proxies,params,data,json_data,trace_id = RequestContext.resolve(**request_kwargs)
+        timeout = self.config.timeout.resolve(timeout)
 
-        timeout = self._resolve_timeout(request_kwargs.pop("timeout", None))
-        proxy = request_kwargs.pop("proxy", None)
-        proxies = request_kwargs.pop("proxies", None)
-        allow_redirects = bool(
-            request_kwargs.pop("allow_redirects", self.config.request.allow_redirects)
-        )
+        allow_redirects = bool(request_kwargs.pop("allow_redirects", self.config.request.allow_redirects))
         stream = bool(request_kwargs.pop("stream", self.config.request.stream))
         verify_ssl = bool(request_kwargs.pop("verify_ssl", self.config.request.verify_ssl))
-        trace_id = str(request_kwargs.pop("trace_id", uuid.uuid4().hex))
+        final_url = self._resolve_url(url)
+        resolved_proxies, proxy_url = self.config.proxy.resolve(final_url, proxy, proxies)
 
-        params = request_kwargs.pop("params", None)
-        data = request_kwargs.pop("data", None)
-        json_data = request_kwargs.pop("json", None)
 
         headers = self.headers
         headers.update(dict(custom_headers))
         cookies = self.cookies
         cookies.update(dict(custom_cookies))
 
-        final_url = self._resolve_url(url)
-        resolved_proxies, proxy_url = self._resolve_proxy(final_url, proxy, proxies)
+
 
         extra = dict(request_kwargs)
         if native_session is not None:

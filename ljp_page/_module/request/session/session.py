@@ -29,36 +29,45 @@ class AsyncSession(AsyncRequestModuleBase):
         super().__init__(config=config if config is not None else LjpConfig(), logger=logger)
         self._session: aiohttp.ClientSession | None = None
         self._session_lock: asyncio.Lock | None = None
-        self._cookie_store = deepcopy(self.config.request.cookies)
+
+        self._headers = deepcopy(self.config.request.headers)
+        self._cookies = deepcopy(self.config.request.cookies)
+
+        self.max_retries = max(0, self.config.retry.max_retries)
+        self.delay = max(0.0, self.config.request.delay)
+
+
+
+
+
         try:
             self._jar = aiohttp.CookieJar(unsafe=True)
         except Exception as  e:
             raise ValueError('不能在同步环境初始化')
-        self._jar.update_cookies(self._cookie_store)
+        self._jar.update_cookies(self._cookies)
 
     @property
     def headers(self) -> dict[str, str]:
         with self._state_lock:
-            return deepcopy(self.config.request.headers)
+            return self._headers
 
     @headers.setter
     def headers(self, values: Mapping[str, str]) -> None:
         with self._state_lock:
-            self.config.request.headers = dict(values)
-        self._sync_headers_to_native()
+            self._headers = dict(values)
+        self.update_session_headers()
 
     @property
     def cookies(self) -> dict[str, str]:
         with self._state_lock:
-            return deepcopy(self._cookie_store)
+            return self._cookies
 
     @cookies.setter
     def cookies(self, values: Mapping[str, str]) -> None:
         with self._state_lock:
             cookie_values = dict(values)
-            self._cookie_store = cookie_values
-            self.config.request.cookies = deepcopy(cookie_values)
-        self._sync_cookies_to_native()
+            self._cookies = cookie_values
+        self.update_session_cookies()
 
     @property
     def closed(self) -> bool:
@@ -68,40 +77,31 @@ class AsyncSession(AsyncRequestModuleBase):
         """增量更新默认请求头。"""
 
         with self._state_lock:
-            self.config.request.headers.update(dict(values))
-        self._sync_headers_to_native()
+            self._headers.update(dict(values))
+        self.update_session_headers()
 
     def update_cookies(self, values: Mapping[str, str]) -> None:
         """增量更新默认 Cookie。"""
 
         with self._state_lock:
-            self._cookie_store.update(dict(values))
-            self.config.request.cookies = deepcopy(self._cookie_store)
-        self._jar.update_cookies(values)
-        if self._session and not self._session.closed:
-            self._session.cookie_jar.update_cookies(values)
+            self._cookies.update(dict(values))
+        self.update_session_cookies()
 
     def clear_cookies(self) -> None:
         """清空当前会话维护的 Cookie。"""
 
         with self._state_lock:
-            self._cookie_store.clear()
-            self.config.request.cookies.clear()
-        self._sync_cookies_to_native()
+            self._cookies.clear()
+        self.update_session_cookies()
 
-    def _get_session_lock(self) -> asyncio.Lock:
-        if self._session_lock is None:
-            self._session_lock = asyncio.Lock()
-        return self._session_lock
-
-    def _sync_headers_to_native(self) -> None:
+    def update_session_headers(self) -> None:
         if self._session and not self._session.closed:
             self._session.headers.clear()
             self._session.headers.update(self.headers)
 
-    def _sync_cookies_to_native(self) -> None:
+    def update_session_cookies(self) -> None:
         with self._state_lock:
-            cookie_snapshot = deepcopy(self._cookie_store)
+            cookie_snapshot = deepcopy(self._cookies)
 
         self._jar.clear()
         self._jar.update_cookies(cookie_snapshot)
@@ -110,13 +110,10 @@ class AsyncSession(AsyncRequestModuleBase):
             self._session.cookie_jar.clear()
             self._session.cookie_jar.update_cookies(cookie_snapshot)
 
-    def _store_cookies(self, cookies: Mapping[str, str]) -> None:
-        if not cookies:
-            return
-        with self._state_lock:
-            self._cookie_store.update(dict(cookies))
-            self.config.request.cookies = deepcopy(self._cookie_store)
-        self._sync_cookies_to_native()
+    def _get_session_lock(self) -> asyncio.Lock|None:
+        if self._session_lock is None:
+            self._session_lock = asyncio.Lock()
+        return self._session_lock
 
     @staticmethod
     def _build_timeout(timeout: tuple[float, float]) -> aiohttp.ClientTimeout:
@@ -153,7 +150,7 @@ class AsyncSession(AsyncRequestModuleBase):
                 headers=self.headers,
                 cookie_jar=self._jar,
                 connector=connector,
-                timeout=self.config.timeout.aiohttp_timeout,
+                timeout=self.config.timeout.get_aiohttp_timeout(),
                 trust_env=self.config.request.trust_env,
             )
             return self._session
@@ -207,14 +204,17 @@ class AsyncSession(AsyncRequestModuleBase):
             raise
         except Exception as exc:
             raise self._map_exception(exc, context) from exc
-
-        self._store_cookies(adapter_response.cookies)
-        return self._build_response(
-            context=context,
-            adapter_response=adapter_response,
-            elapsed=time.perf_counter() - total_start,
-            retries=context.attempt,
-        )
+        try:
+            self.update_cookies(adapter_response.cookies)
+            return self._build_response(
+                context=context,
+                adapter_response=adapter_response,
+                elapsed=time.perf_counter() - total_start,
+                retries=context.attempt,
+            )
+        except Exception as exc:
+            print(exc)
+            raise exc
 
     @f_mark('构建参数，重试机制')
     async def request(
@@ -228,11 +228,8 @@ class AsyncSession(AsyncRequestModuleBase):
         total_start = time.perf_counter()
         request_kwargs = dict(kwargs)
         base_attempt = int(request_kwargs.pop(Constants.ATTEMPT, 0))
-        max_retries = max(0, self.config.retry.max_retries)
-        delay = max(0.0, self.config.request.request_delay)
 
-
-        @retry(max_retries=max_retries,delay=delay)
+        @retry(max_retries=self.max_retries,delay=self.delay)
         async def _send(*a, **kw):
 
             retry_index = kw[Constants.ATTEMPT]
@@ -256,18 +253,11 @@ class AsyncSession(AsyncRequestModuleBase):
                 raise
             except Exception as exc:
                 mapped_error = self._map_exception(exc, context)
-                if retry_index >= max_retries or not self.config.retry.should_retry(
-                    exc,
-                    mapped_error
-                ):
-                    raise mapped_error from exc
-
-                await self.config.retry.handle_delay(retry_index + 1)
-                await self.config.retry.call_callback(self)
-
-        return await _send()
-
-        raise RuntimeError("异步请求重试流程异常结束")
+                raise mapped_error
+        try:
+            return await _send()
+        except:
+            raise RuntimeError("异步请求重试流程异常结束")
 
     async def open(self) -> AsyncSession:
         await self.ensure_session()

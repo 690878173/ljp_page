@@ -30,7 +30,6 @@ class RetryConfig:
     async def call_callback(self, caller_instance: Any) -> None:
         if not self.on_retry:
             return
-
         try:
             await self.on_retry(caller_instance)
         except TypeError as e:
@@ -77,8 +76,7 @@ def retry(
     exception_to_raise: Optional[Exception] = None,
 ):
     """
-    Decorator to try to execute a function again in case of exception.
-    For greater control, it is a good practice to specify the exceptions that should be handled.
+    重试装饰器，只打印一次重试信息
 
     Args:
         max_retries (int): Maximum number of attempts

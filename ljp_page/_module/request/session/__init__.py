@@ -4,9 +4,10 @@ from typing import TYPE_CHECKING
 from ljp_page._core.utils.lazy_import import bind_lazy_exports
 
 if TYPE_CHECKING:
-    from .base import *  # noqa: F403
+    # from .base import *  # noqa: F403
     from .session import ASession
     from .sync_session import SyncSession
+    from .config import *
 
 
 def curl_to_requests(curl_str: str) -> tuple[str, dict, dict]:

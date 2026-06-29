@@ -215,7 +215,7 @@ class SyncSession(SyncRequestModuleBase):
         request_kwargs = dict(kwargs)
         base_attempt = int(request_kwargs.pop("retry_attempt", 0))
         max_retries = max(0, self.config.retry.max_retries)
-        delay = max(0.0, self.config.request.request_delay)
+        delay = max(0.0, self.config.request.delay)
 
         for retry_index in range(max_retries + 1):
             if delay > 0:

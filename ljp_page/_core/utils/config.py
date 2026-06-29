@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING, Mapping
+from urllib.parse import urlparse
+
 from .retry.ljp_retry import RetryConfig
 
 if TYPE_CHECKING:
@@ -21,16 +23,32 @@ class TimeoutConfig:
 
         return self.connect, self.read
 
-    @property
-    def aiohttp_timeout(self) -> aiohttp.ClientTimeout:
+
+    def get_aiohttp_timeout(self, timeout: tuple[float,float] | None = None) -> aiohttp.ClientTimeout:
         """aiohttp 适配超时。"""
         import aiohttp
+        if timeout is None:
+            connect,read = self.connect, self.read
+        else:
+            connect,read = timeout
         return aiohttp.ClientTimeout(
-            total=self.connect + self.read,
-            connect=self.connect,
-            sock_connect=self.connect,
-            sock_read=self.read,
+            total=connect + read,
+            connect=connect,
+            sock_connect=connect,
+            sock_read=read,
         )
+
+    def resolve(self,timeout: Any) -> tuple[float, float]:
+        if timeout is None:
+            return self.connect, self.read
+        if isinstance(timeout, TimeoutConfig):
+            return timeout.connect, timeout.read
+        if isinstance(timeout, (int, float)):
+            numeric = float(timeout)
+            return numeric, numeric
+        if isinstance(timeout, tuple) and len(timeout) == 2:
+            return float(timeout[0]), float(timeout[1])
+        raise TypeError(f"不支持的 timeout 类型: {type(timeout).__name__}")
 
 @dataclass
 class SessionPoolConfig:
@@ -65,5 +83,18 @@ class ProxyConfig:
         if scheme == "https":
             return self.https or self.http
         return self.http or self.https
+
+    def resolve(self,
+        url: str,
+        proxy: str | None,
+        proxies: Mapping[str, str] | None,)-> tuple[dict[str, str] | None, str | None]:
+        scheme = urlparse(url).scheme or "http"
+        if proxy:
+            return {scheme: proxy}, proxy
+        if proxies:
+            proxy_dict = dict(proxies)
+            return proxy_dict, proxy_dict.get(scheme)
+        proxy_dict = self.as_requests()
+        return proxy_dict, self.for_scheme(scheme)
 
 
