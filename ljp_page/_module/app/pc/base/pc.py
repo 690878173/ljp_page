@@ -124,7 +124,7 @@ class BasePc(Ljp_BaseClass_Logger, ABC):
         finally:
             self._stop()
 
-    async def _run(self):
+    async def _r    un(self):
         self.scheduler.reset_p1_queue()
         await self.init_manage()
         await self.before_run()

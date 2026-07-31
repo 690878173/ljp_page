@@ -15,8 +15,8 @@
 ```python
 import asyncio
 
-from ljp_page.pc.edge import Pydoll_Edge as Edge
-from ljp_page.pc.edge import Pydoll_ChromiumOptions as ChromiumOptions
+from ljp_page.request.edge import Pydoll_Edge as Edge
+from ljp_page.request.edge import Pydoll_ChromiumOptions as ChromiumOptions
 ```
 
 如果你希望直接使用内部模块，也可以这样导入：
@@ -77,8 +77,8 @@ from ljp_page._module.request.brower.pydoll import By, Key, PageLoadState
 ```python
 import asyncio
 
-from ljp_page.pc.edge import Pydoll_Edge as Edge
-from ljp_page.pc.edge import Pydoll_ChromiumOptions as ChromiumOptions
+from ljp_page.request.edge import Pydoll_Edge as Edge
+from ljp_page.request.edge import Pydoll_ChromiumOptions as ChromiumOptions
 
 
 async def main():
@@ -162,7 +162,7 @@ async with Edge() as browser:
 ### 3.3 配置示例
 
 ```python
-from ljp_page.pc.edge import Pydoll_ChromiumOptions as ChromiumOptions
+from ljp_page.request.edge import Pydoll_ChromiumOptions as ChromiumOptions
 from ljp_page._module.request.brower.pydoll import PageLoadState
 
 options = ChromiumOptions()

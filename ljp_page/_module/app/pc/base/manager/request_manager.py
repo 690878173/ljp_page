@@ -6,7 +6,7 @@ from abc import ABC,abstractmethod
 from typing import TYPE_CHECKING, Any
 
 from ljp_page._core.base import Ljp_BaseClass_Logger
-from ljp_page._module.request.verification import VerificationContext
+from ljp_page._module.request.verification import SessionVerificationContext
 from ljp_page._module.request.session.session import ASession as Session
 
 if TYPE_CHECKING:
@@ -50,7 +50,7 @@ class Pc_Request(Ljp_BaseClass_Logger, PC_Base_Request):
             if self.session is not None:
                 return
             self.session = Session(self.config.ljp_config)
-            self.session.verification_gate.set_verification(
+            self.session.verification.set_verification(
                 self._check_response_verification,
                 self._handle_response_verification,
             )
@@ -66,7 +66,7 @@ class Pc_Request(Ljp_BaseClass_Logger, PC_Base_Request):
 
         return await self.owner.check_meet_fp(response.text)
 
-    async def _handle_response_verification(self, context: VerificationContext) -> None:
+    async def _handle_response_verification(self, context: SessionVerificationContext) -> None:
         """执行外部验证，并允许业务代码通过 ASession 更新 cookies、headers 等状态。"""
 
         await self.owner.fp_do(

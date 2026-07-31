@@ -16,7 +16,7 @@ async def handler(res):
     print(f'handler:验证完成')
     return True
 
-session.verification_gate.set_verification(checker=checker,handler=handler)
+session.verification.set_verification(checker=checker, handler=handler)
 
 async def t_test(i):
     url = 'https://www.baidu.com'
@@ -47,7 +47,7 @@ async def main():
 
     await exc.submit(session.close())
     exc.shutdown()
-
+from ljp_page.request import ASession
 
 if __name__ == '__main__':
     asyncio.run(main())

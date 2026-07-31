@@ -10,7 +10,7 @@ import aiohttp
 
 from ljp_page._module.request.session.base import AsyncRequestModuleBase
 from ljp_page._module.request.session.config import AdapterResponse, LjpConfig, LjpResponse, RequestContext
-from ljp_page._module.request.verification import AsyncVerificationGate, VerificationContext
+from ljp_page._module.request.verification import AsyncVerification
 from ljp_page._core.base import Ljp_BaseClass_Logger
 from ljp_page.logger import logger
 from ljp_page._core.utils.config import SessionPoolConfig
@@ -161,10 +161,6 @@ class AsyncSession(AsyncRequestModuleBase):
 
         return await self.ensure_session()
 
-    @staticmethod
-    def _should_retry(retry_config: Any,original_error: Exception,mapped_error: Exception,) -> bool:
-        return retry_config.should_retry(original_error, mapped_error)
-
     @f_mark('实际使用session发送请求')
     async def _send_once(
         self,
@@ -256,8 +252,8 @@ class AsyncSession(AsyncRequestModuleBase):
                 raise mapped_error
         try:
             return await _send()
-        except:
-            raise RuntimeError("异步请求重试流程异常结束")
+        except Exception as exc:
+            raise RuntimeError("异步请求重试流程异常结束") from exc
 
     async def open(self) -> AsyncSession:
         await self.ensure_session()
@@ -275,8 +271,10 @@ class AsyncSession(AsyncRequestModuleBase):
     async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         await self.close()
 
+
+
 class ASession(Ljp_BaseClass_Logger):
-    def __init__(self,config: LjpConfig|None=None,ui=None) -> None:
+    def __init__(self,config: LjpConfig|None=None,ui=None,*,verification=None,_AsyncSession=AsyncSession) -> None:
         super().__init__()
         self.logger = logger
         self.config = config if config else LjpConfig(sessionpool=SessionPoolConfig(max_session=1))
@@ -284,11 +282,13 @@ class ASession(Ljp_BaseClass_Logger):
         self._sessions: list[AsyncSession] = []
         self._init_lock = asyncio.Lock()
         self.init_mask = False
-        self.verification_gate = AsyncVerificationGate(
-            result_applier=self.apply_verification_result,
-            checker=None,
-            handler=None
-        )
+        self.verification = verification
+        # self.verification = AsyncVerification(
+        #     result_applier=self.apply_verification_result,
+        #     checker=None,
+        #     handler=None
+        # )
+        self._AsyncSession = _AsyncSession
 
     @property
     def headers(self) -> dict[str, str]:
@@ -325,7 +325,7 @@ class ASession(Ljp_BaseClass_Logger):
         for session in self._sessions:
             session.clear_cookies()
 
-    def apply_verification_result(self, result: Any, context: VerificationContext | None = None) -> None:
+    def apply_verification_result(self, result: Any, context  = None) -> None:
         """应用验证函数返回的会话状态，例如 cookies、headers。"""
 
         if not isinstance(result, Mapping):
@@ -344,12 +344,12 @@ class ASession(Ljp_BaseClass_Logger):
                 if self.init_mask:
                     return
                 for _ in range(self.config.sessionpool.max_session):
-                    session = AsyncSession(config=self.config, logger=self.logger)
+                    session = self._AsyncSession(config=self.config, logger=self.logger)
                     self._sessions.append(session)
                     self.session_queue.put_nowait(session)
                 self.init_mask = True
 
-    async def _get_req_session(self) -> AsyncSession:
+    async def _get_req_session(self):
         if not self.init_mask:
             await self._init()
         session = await self.session_queue.get()
@@ -374,28 +374,16 @@ class ASession(Ljp_BaseClass_Logger):
             current_session["value"] = request_session
             return await request_session.request(method, url, **request_kwargs)
 
-        def build_context(
-            response: LjpResponse,
-            verify_attempt: int,
-            version: int,
-        ) -> VerificationContext:
-            return VerificationContext(
-                owner=self,
-                session=current_session["value"],
-                response=response,
-                method=method.upper(),
-                url=url,
-                request_kwargs=deepcopy(request_kwargs),
-                verify_attempt=verify_attempt,
-                version=version,
-            )
 
-        return await self.verification_gate.run(
-            send,
-            context_factory=build_context,
-            verify_response=verify_response,
-            max_retries=verify_max_retries,
-        )
+        if self.verification:
+            return await self.verification.run(
+                send,
+
+                verify_response=verify_response,
+                max_retries=verify_max_retries,
+            )
+        else:
+            return await send()
 
 
     async def get(self, url: str,*,session = None, **kwargs: Any) -> LjpResponse:

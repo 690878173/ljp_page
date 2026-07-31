@@ -32,7 +32,7 @@ def scan_export_modules(pkg_path: str, include_private: bool = False) -> list[st
 
         full = os.path.join(pkg_path, name)
         if os.path.isdir(full):
-            if os.path.exists(os.path.join(full, "../__init__.py")):
+            if os.path.exists(os.path.join(full, "__init__.py")):
                 res.append(name)
         elif name.endswith(".py") and name != "__init__.py":
             res.append(stem)
@@ -72,17 +72,6 @@ def make_entity_getattr(pkg_name: str, mod_list: list[str]) -> Callable[[str], o
             obj = getattr(sub_mod, name)
             cache[name] = obj
             return obj
-
-        # 兼容未声明 __all__ 的历史模块：只在显式访问成员时逐个探测。
-        for candidate in mod_list:
-            try:
-                sub_mod = import_module(f"{pkg_name}.{candidate}")
-            except ModuleNotFoundError:
-                continue
-            if hasattr(sub_mod, name):
-                obj = getattr(sub_mod, name)
-                cache[name] = obj
-                return obj
 
         # 允许按属性访问直接子模块，例如 package.submodule。
         if name in mod_list:
@@ -254,3 +243,8 @@ def _read_literal_all(file_path: Path) -> list[str] | None:
             return list(value)
         return None
     return None
+
+
+
+
+__all__ = ['bind_lazy_exports','proxy_module_exports','mapped_module_exports']

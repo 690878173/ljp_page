@@ -14,7 +14,7 @@ from ljp_page._modules.request import Html
 
 from ..base import Pc
 from .ui import XsUI
-from ljp_page.pc.edge.pydoll import cf
+from ljp_page.request.edge.pydoll import cf
 
 class Dybz(XsUI):
     """示例站点解析实现。"""

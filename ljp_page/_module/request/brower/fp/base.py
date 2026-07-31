@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import random
-from typing import Any, Awaitable, Callable, Iterator
+from typing import Any, Awaitable, Callable, Iterator,Protocol, Any, Awaitable, Union
 
 from ljp_page._core.utils.other import f_mark
 
@@ -15,7 +15,14 @@ CdpSend = Callable[..., Awaitable[dict[str, Any]]]
 class FP_targe:  # noqa: N801
     """常用反爬目标域名配置。"""
 
-    CLOUDFLARE_CHALLENGE_DOMAIN = "challenges.cloudflare.com"
+    CHALLENGE_DOMAIN = "challenges.cloudflare.com"
+    INVALID_TITLE_KEYWORDS = (
+        "Just a moment",
+        "www.cloudflare.com",
+        "challenge-platform",
+        "Verify you are human",
+        "请稍候",
+    )
 
 
 class CDPBaseSession:
@@ -77,6 +84,7 @@ class FP_DOM:  # noqa: N801
         return cls._CDPSession(cdp_session)
 
     @staticmethod
+    @f_mark("将 CDP 节点的 attributes 列表转换为字典")
     def attrs(node: dict[str, Any]) -> dict[str, str]:
         """将 CDP 节点的 attributes 列表转换为字典。"""
         raw_attrs = node.get("attributes", [])
@@ -86,6 +94,7 @@ class FP_DOM:  # noqa: N801
         }
 
     @classmethod
+    @f_mark("判断当前节点自身信息是否包含目标域名")
     def has_targe_domain(cls, node: dict[str, Any]) -> bool:
         """判断当前节点自身信息是否包含目标域名。"""
         attrs = cls.attrs(node)
@@ -154,6 +163,7 @@ class FP_DOM:  # noqa: N801
         return shadow_roots
 
     @classmethod
+    @f_mark("判断 CDP 节点是否为目标复选框元素")
     def _is_checkbox_node(cls, node: dict[str, Any]) -> bool:
         """判断 CDP 节点是否为目标复选框元素。"""
         attrs = cls.attrs(node)
@@ -162,6 +172,7 @@ class FP_DOM:  # noqa: N801
         return local_name == "span" and cls._CHECKBOX_CLASS in class_names
 
     @classmethod
+    @f_mark("在当前 DOM 树中直接查找复选框节点")
     def find_checkbox(cls, root: dict[str, Any], targe: bool = False) -> dict[str, Any] | None:
         """在当前 DOM 树中直接查找复选框节点。"""
         for node, in_targe_tree in cls._iter_nodes(root):
@@ -172,12 +183,14 @@ class FP_DOM:  # noqa: N801
         return None
 
     @classmethod
+    @f_mark("通过 CDP 获取完整 DOM 树")
     async def cdp_get_document(cls, cdp_session) -> dict[str, Any]:
         """通过 CDP 获取完整 DOM 树。"""
         session = cls.as_cdp_session(cdp_session)
         return await session.send(**DomCommands.get_document(depth=-1, pierce=True))
 
     @classmethod
+    @f_mark("轮询查找 shadow root")
     async def cdp_find_shadow_root(
         cls,
         cdp_session,
@@ -258,16 +271,37 @@ class FP_DOM:  # noqa: N801
         )
 
 
+
+class PageHost(Protocol):
+    """FP_Find 需要的宿主能力"""
+
+    @property
+    def title(self) -> Union[str, Awaitable[str]]: ...
+
+    @property
+    def frames(self) -> Union[list, Awaitable[list]]: ...
+
+    @property
+    def cookies(self) -> Union[list, Awaitable[list]]: ...
+
+    async def get_cdp_session(self, own=None) -> Any: ...
+
+
+    def info(self, msg: str) -> None: ...
+
+    def error(self, msg: str) -> None: ...
+    # 还可以加上 warning 等
+
 class FP_Find:  # noqa: N801
     """通用验证页查找/点击流程基类。"""
 
     _DOM: type[FP_DOM] = FP_DOM
+    _STR: type[FP_targe] = FP_targe
 
-    async def get_cdp_session(self, own=None):
-        """由具体浏览器实现返回当前页面或子 frame 的 CDP session。"""
-        raise NotImplementedError
+    def __init__(self,host: PageHost) -> None:
+        self._host = host
 
-    async def _maybe_await(self, value):
+    async def to_await(self, value):
         """兼容属性、协程属性和普通/异步方法三种宿主写法。"""
         if callable(value):
             value = value()
@@ -276,59 +310,62 @@ class FP_Find:  # noqa: N801
         return value
 
     async def _get_title(self) -> str:
-        with contextlib.suppress(Exception):
-            return await self._maybe_await(getattr(self, "title"))
-        return ""
+        return await self.to_await(self._host.title)
 
     async def _get_frames(self):
-        with contextlib.suppress(Exception):
-            return await self._maybe_await(getattr(self, "frames"))
-        return []
+        return await self.to_await(self._host.frames)
 
     async def _get_cookies(self):
-        for name in ("cookies", "cookie"):
-            with contextlib.suppress(Exception):
-                value = getattr(self, name)
-                return await self._maybe_await(value)
-        return []
+        return await self.to_await(self._host.cookies)
+
+    async def has_cookie(self) -> bool:
+        return bool(await self._get_cookies())
 
     async def check_fp(self) -> bool:
         """返回当前是否仍处于验证页；子类可按具体站点覆盖。"""
         return await self.is_challenge_page()
 
-    async def has_cookie(self) -> bool:
-        return bool(await self._get_cookies())
-
     async def is_challenge_page(self) -> bool:
-        return await self.has_frame()
-
-    async def has_frame(self) -> bool:
         """判断当前页面是否仍存在目标验证 iframe。"""
-        return False
+        title = await self._get_title()
+        if any(keyword in title for keyword in self._STR.INVALID_TITLE_KEYWORDS):
+            return True
+        frames = await self._get_frames()
+        return any(self._DOM._DOMAIN in item.url for item in frames)
 
-    async def _in_get_cdp_session(self, own=None):
-        return self._DOM.as_cdp_session(await self.get_cdp_session(own))
+
+    async def _get_cdp_session(self, own=None):
+        return self._DOM.as_cdp_session(await self._host.get_cdp_session(own))
+
+    async def get_frame_session(self):
+        frame = await self.find_frame(self._DOM._DOMAIN)
+        return await self._get_cdp_session(frame)
+
+    async def find_frame(self,timeout: float = 10) -> Any:
+        """通用的 frame 查找器，匹配不同域名。"""
+        start = asyncio.get_event_loop().time()
+        while True:
+            frames = await self._get_frames()
+            frame = next((item for item in frames if self._DOM._DOMAIN in item.url), None)
+            if frame is not None:
+                return frame
+            if asyncio.get_event_loop().time() - start > timeout:
+                raise TimeoutError("找不到符合条件的 iframe")
+            await asyncio.sleep(0.3)
 
     async def cdp_find_shadow_root(self, timeout: float = 10):
-        session = await self._in_get_cdp_session()
+        session = await self._get_cdp_session()
         shadow_root = await self._DOM.cdp_find_shadow_root(session, timeout=timeout)
         if shadow_root is None:
             raise TimeoutError("找不到目标 Shadow Root")
         return shadow_root
 
     async def cdp_find_checkbox(self, timeout: float = 10):
-        session = await self.frame_session()
+        session = await self.get_frame_session()
         checkbox = await self._DOM.cdp_find_checkbox(session, timeout=timeout)
         if checkbox is None:
             raise TimeoutError("在目标 iframe 内找不到复选框")
         return session, checkbox
-
-    async def frame_session(self):
-        frame = await self.find_frame()
-        return await self._in_get_cdp_session(frame)
-
-    async def find_frame(self):
-        return None
 
     async def _cf(self, timeout: float = 10):
         session = None
@@ -337,10 +374,10 @@ class FP_Find:  # noqa: N801
             session, checkbox = await self.cdp_find_checkbox(timeout=timeout)
             print(f"找到的目标 Checkbox: {checkbox}")
             await self._DOM.cdp_click_node(cdp_session=session, node_id=checkbox["nodeId"])
-            self.info("目标 iframe 内点击已执行")
+            self._host.info("目标 iframe 内点击已执行")
             return await self.wait_result(timeout=max(timeout * 4, 20))
         except Exception as e:
-            self.error(f"iframe CDP 处理验证失败: {e}")
+            self._host.error(f"iframe CDP 处理验证失败: {e}")
             return False
         finally:
             if session is not None:

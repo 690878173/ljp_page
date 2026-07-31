@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import sys
-from typing import Any
+from typing import Any,TYPE_CHECKING
 
-from typing_extensions import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -13,7 +12,7 @@ class LjpBaseException(Exception):  # noqa: N818
     """项目全局唯一自定义异常基类（增强版，支持子类继承）"""
     message:str = '异常'
 
-    def __init__(self,message: str|None,*,context: dict | None = None,) -> None:
+    def __init__(self,message: str|None,*,context: dict | None = None,**kwargs) -> None:
 
         self.context = context or {}
         message = message or self.message

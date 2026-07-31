@@ -3,9 +3,10 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from typing import Any
+import random
 
 from .base import FP_DOM, CDPBaseSession
-from .dom import DomCommands
+from .dom import DomCommands,InputCommands,RuntimeCommands
 
 
 class ShadowRootNotFound(RuntimeError):  # noqa: N818
@@ -17,126 +18,133 @@ class CdpElementNotFound(RuntimeError):  # noqa: N818
 
 
 @dataclass(slots=True)
-class CdpElement:
-    """基于 CDP nodeId 的轻量元素包装器。"""
+class CDPNode:
+    """所有 CDP 节点的基类，提供点击、查询、属性获取等通用能力。"""
 
     cdp_session: CDPBaseSession
     node_id: int
     backend_node_id: int | None = None
-    dom_cls: type[FP_DOM] = FP_DOM
 
+    # ---------- 核心交互能力 ----------
     async def click(self) -> None:
-        """点击当前节点。"""
-        await self.dom_cls.cdp_click_node(self.cdp_session, self.node_id)
+        """模拟真实鼠标点击（含坐标计算和 JS 回退）。"""
+        session = self.cdp_session
 
+        # 1. 滚动到视图
+        await session.send(**DomCommands.scroll_into_view_if_needed(node_id=self.node_id))
+
+        # 2. 尝试坐标点击
+        try:
+            box = await session.send(**DomCommands.get_box_model(node_id=self.node_id))
+            quad = box["model"].get("content") or box["model"]["border"]
+            x_values = quad[0::2]
+            y_values = quad[1::2]
+            width = max(x_values) - min(x_values)
+            height = max(y_values) - min(y_values)
+
+            import random
+            x = min(x_values) + width * 0.5 + random.uniform(-min(3, width / 4), min(3, width / 4))
+            y = min(y_values) + height * 0.5 + random.uniform(-min(3, height / 4), min(3, height / 4))
+
+            await session.send(**InputCommands.dispatch_mouse_event("mouseMoved", x, y))
+            await asyncio.sleep(0.1)
+            await session.send(**InputCommands.dispatch_mouse_event("mousePressed", x, y))
+            await asyncio.sleep(0.08)
+            await session.send(**InputCommands.dispatch_mouse_event("mouseReleased", x, y))
+            return
+        except Exception:
+            # 3. 坐标点击失败，回退到 JS 点击
+            remote = await session.send(**DomCommands.resolve_node(node_id=self.node_id))
+            object_id = remote["object"]["objectId"]
+            await session.send(
+                **RuntimeCommands.call_function_on(
+                    object_id=object_id,
+                    function_declaration="function() { this.click(); }",
+                )
+            )
+
+    async def query(self, selector: str, timeout: float = 0) -> CDPNode | None:
+        """在当前节点作用域内查找第一个匹配元素（支持 Shadow DOM）。"""
+        start = asyncio.get_event_loop().time()
+        while True:
+            resp = await self.cdp_session.send(
+                **DomCommands.query_selector(self.node_id, selector)
+            )
+            node_id = resp.get("nodeId")
+            if node_id:
+                return CDPNode(self.cdp_session, node_id)
+            if not timeout or asyncio.get_event_loop().time() - start > timeout:
+                return None
+            await asyncio.sleep(0.3)
+
+    async def query_all(self, selector: str, timeout: float = 0) -> list[CDPNode]:
+        """在当前节点作用域内查找所有匹配元素。"""
+        start = asyncio.get_event_loop().time()
+        while True:
+            resp = await self.cdp_session.send(
+                **DomCommands.query_selector_all(self.node_id, selector)
+            )
+            node_ids = resp.get("nodeIds", [])
+            if node_ids:
+                return [CDPNode(self.cdp_session, nid) for nid in node_ids]
+            if not timeout or asyncio.get_event_loop().time() - start > timeout:
+                return []
+            await asyncio.sleep(0.3)
+
+    # ---------- 属性获取 ----------
     @property
     async def outer_html(self) -> str:
-        """返回当前节点的 HTML。"""
-        response = await self.cdp_session.send(
-            **DomCommands.get_outer_html(node_id=self.node_id)
+        resp = await self.cdp_session.send(**DomCommands.get_outer_html(node_id=self.node_id))
+        return resp.get("outerHTML") or resp.get("result", {}).get("outerHTML", "")
+
+    async def get_attribute(self, name: str) -> str | None:
+        # 利用 Runtime 获取属性
+        remote = await self.cdp_session.send(**DomCommands.resolve_node(node_id=self.node_id))
+        obj_id = remote["object"]["objectId"]
+        result = await self.cdp_session.send(
+            **RuntimeCommands.call_function_on(
+                object_id=obj_id,
+                function_declaration=f"function() {{ return this.getAttribute('{name}'); }}",
+                return_by_value=True,
+            )
         )
-        return response.get("outerHTML") or response.get("result", {}).get("outerHTML", "")
+        return result.get("result", {}).get("value")
 
     async def get_shadow_root(self, timeout: float = 0) -> "ShadowRoot":
-        """获取当前元素挂载的 shadow root，行为参考 pydoll WebElement.get_shadow_root。"""
         start = asyncio.get_event_loop().time()
         while True:
             response = await self.cdp_session.send(
                 **DomCommands.describe_node(node_id=self.node_id, depth=1, pierce=True)
             )
-            node_info = response.get("node") or response.get("result", {}).get("node", {})
+            node_info = response.get("node") or {}
             shadow_roots = node_info.get("shadowRoots", [])
             if shadow_roots:
-                return ShadowRoot.from_node(
-                    cdp_session=self.cdp_session,
-                    node=shadow_roots[0],
-                    dom_cls=self.dom_cls,
-                    host_element=self,
-                )
-
+                root_node = shadow_roots[0]
+                root_id = root_node.get("nodeId")
+                if root_id:
+                    return ShadowRoot(
+                        cdp_session=self.cdp_session,
+                        node_id=root_id,
+                        backend_node_id=root_node.get("backendNodeId"),
+                        mode=root_node.get("shadowRootType", "open"),
+                    )
             if not timeout or asyncio.get_event_loop().time() - start > timeout:
                 raise ShadowRootNotFound("当前元素没有 shadow root")
             await asyncio.sleep(0.5)
 
 
 @dataclass(slots=True)
-class ShadowRoot:
+class ShadowRoot(CDPNode):
     """通用 ShadowRoot 包装器，只依赖 CDP 指令发送函数。"""
-
-    cdp_session: CDPBaseSession
-    node_id: int
-    backend_node_id: int | None = None
     mode: str = "open"
-    host_element: CdpElement | None = None
-    dom_cls: type[FP_DOM] = FP_DOM
-
-    @classmethod
-    def from_node(
-        cls,
-        cdp_session,
-        node: dict[str, Any],
-        dom_cls: type[FP_DOM] = FP_DOM,
-        host_element: CdpElement | None = None,
-    ) -> "ShadowRoot":
-        """根据 CDP shadow root 节点构建 ShadowRoot。"""
-        node_id = node.get("nodeId")
-        if node_id is None:
-            raise ShadowRootNotFound("shadow root 缺少 nodeId，无法继续查询")
-        return cls(
-            cdp_session=dom_cls.as_cdp_session(cdp_session),
-            node_id=node_id,
-            backend_node_id=node.get("backendNodeId"),
-            mode=node.get("shadowRootType", "open"),
-            host_element=host_element,
-            dom_cls=dom_cls,
-        )
-
-    @property
-    async def inner_html(self) -> str:
-        """返回 shadow root 的 HTML。"""
-        response = await self.cdp_session.send(
-            **DomCommands.get_outer_html(node_id=self.node_id)
-        )
-        return response.get("outerHTML") or response.get("result", {}).get("outerHTML", "")
-
-    async def query(
-        self,
-        selector: str,
-        *,
-        find_all: bool = False,
-        timeout: float = 0,
-        raise_exc: bool = True,
-    ) -> CdpElement | list[CdpElement] | None:
-        """在 shadow root 内执行 CSS 查询，参考 pydoll ShadowRoot.query。"""
-        start = asyncio.get_event_loop().time()
-        while True:
-            command = (
-                DomCommands.query_selector_all(self.node_id, selector)
-                if find_all
-                else DomCommands.query_selector(self.node_id, selector)
-            )
-            response = await self.cdp_session.send(**command)
-
-            if find_all:
-                node_ids = response.get("nodeIds") or response.get("result", {}).get("nodeIds", [])
-                if node_ids:
-                    return [
-                        CdpElement(self.cdp_session, node_id, dom_cls=self.dom_cls)
-                        for node_id in node_ids
-                    ]
-            else:
-                node_id = response.get("nodeId") or response.get("result", {}).get("nodeId", 0)
-                if node_id:
-                    return CdpElement(self.cdp_session, node_id, dom_cls=self.dom_cls)
-
-            if not timeout or asyncio.get_event_loop().time() - start > timeout:
-                if raise_exc:
-                    raise CdpElementNotFound(f"shadow root 内未找到元素: {selector}")
-                return [] if find_all else None
-            await asyncio.sleep(0.5)
 
     def __repr__(self) -> str:
         return f"ShadowRoot(mode={self.mode}, node_id={self.node_id})"
+
+
+
+
+
 
 
 async def find_shadow_roots(
@@ -163,7 +171,6 @@ async def find_shadow_roots(
 
 
 __all__ = [
-    "CdpElement",
     "CdpElementNotFound",
     "ShadowRoot",
     "ShadowRootNotFound",

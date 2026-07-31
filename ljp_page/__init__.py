@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from . import logger as logger
     from . import ocr as ocr
     from . import page_install as page_install
-    from . import pc as pc
+    from . import request as pc
     from . import sjfx as sjfx
     from . import threadpool as threadpool
 

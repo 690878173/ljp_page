@@ -1,4 +1,3 @@
-# 生成时间：04-08-16-20-59
 """机器学习模型通用基类。"""
 
 from __future__ import annotations

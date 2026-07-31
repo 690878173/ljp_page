@@ -16,7 +16,6 @@ _JSON_UNSET = object()
 @dataclass
 class RequestConfig:
     """请求行为配置。"""
-
     base_url: str = ""
     verify_ssl: bool = True
     allow_redirects: bool = True
@@ -173,6 +172,8 @@ class LjpResponse:
                     "响应 JSON 解析失败",
                 ) from exc
         return self._json_cache
+
+
 
 
 __all__ = [

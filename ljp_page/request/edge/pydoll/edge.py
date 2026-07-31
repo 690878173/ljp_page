@@ -1,7 +1,7 @@
 # 05-19-16-20-00
 from typing import TYPE_CHECKING
 
-from ljp_page._core.utils._lazy_import import make_proxy_getattr
+from ljp_page._core.utils.lazy_import import make_proxy_getattr
 
 if TYPE_CHECKING:
     from ljp_page._module.request.brower.pydoll import *

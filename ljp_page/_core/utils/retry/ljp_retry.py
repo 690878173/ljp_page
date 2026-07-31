@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 from dataclasses import dataclass
 from functools import wraps
 from typing import Any, Callable, Coroutine, List, Optional, Type, TypeVar, Union
@@ -66,6 +67,7 @@ class RetryConfig:
         return self.is_matching_exception(exc) or self.is_matching_exception(other)
 
 
+
 def retry(
     config = None,
     max_retries: int = 2,
@@ -77,23 +79,7 @@ def retry(
 ):
     """
     重试装饰器，只打印一次重试信息
-
-    Args:
-        max_retries (int): Maximum number of attempts
-        exceptions (Union[Type[Exception], List[Type[Exception]]]): Exception types that should be
-            handled
-        on_retry (Optional[Callable], optional): Function called after each failed attempt
-        delay (float): Delay between attempts in seconds
-        exponential_backoff (bool): If True, increase the delay exponentially
-
-    Usage:
-        @retry_on_exception(
-            max_retries=3,
-            exceptions=[ValueError, TypeError],
-            delay=1
-        )
-        def my_function():
-            ...
+    强制要求：被装饰函数必须包含 **kwargs 参数，用于接收重试次数注入
     """
     if config is None:
         config = RetryConfig(
@@ -107,6 +93,19 @@ def retry(
     def decorator(
         func: Callable[..., Coroutine[Any, Any, T]],
     ) -> Callable[..., Coroutine[Any, Any, T]]:
+        # ========== 定义阶段强制校验签名 ==========
+        sig = inspect.signature(func)
+        has_var_kw = any(
+            param.kind == inspect.Parameter.VAR_KEYWORD
+            for param in sig.parameters.values()
+        )
+        if not has_var_kw:
+            raise TypeError(
+                f"被 retry 装饰的函数 {func.__name__} 必须包含 **kwargs 参数，"
+                f"用于接收重试注入的 {Constants.ATTEMPT} 关键字参数"
+            )
+        # =================================================
+
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> T:
             last_exception: Optional[Exception] = None
@@ -136,6 +135,7 @@ def retry(
         return wrapper
 
     return decorator
+
 
 
 __all__ = [

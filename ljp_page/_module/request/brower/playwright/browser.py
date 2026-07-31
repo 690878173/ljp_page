@@ -3,7 +3,7 @@ import asyncio
 from pathlib import Path
 from typing import Any, Literal, Optional
 from ljp_page._core.base import Ljp_BaseClass_Logger
-from ljp_page._module.request.verification import AsyncVerificationGate
+from ljp_page._module.request.verification import AsyncVerification
 from ..fp.fp_cf import CF_Find, CF_str
 
 from .config import BrowserLaunchConfig
@@ -13,6 +13,8 @@ from ..request import Request_need,Request
 from playwright.async_api import BrowserContext, Error, Page, TimeoutError, async_playwright
 
 
+
+
 class Playwright(Ljp_BaseClass_Logger):
 
     def __init__(self, config = None, *, playwright=None):
@@ -20,7 +22,9 @@ class Playwright(Ljp_BaseClass_Logger):
         self.own_playwright = playwright
         self.config: BrowserLaunchConfig = config
         self.browser = None
-        self.context = None
+        self.context:Ljp_Context = None
+
+        self._ua = None  # 新增缓存
 
     async def start(self):
         if not self.own_playwright:
@@ -43,27 +47,26 @@ class Playwright(Ljp_BaseClass_Logger):
             context = await self.browser.new_context(**context_options)
         self.context = Ljp_Context(context, self)
 
+        if self.config.user_agent:
+            # 如果配置里显式指定了 UA，直接使用
+            self._ua = self.config.user_agent
+        else:
+            # 否则通过临时页面获取真实 UA
+            temp_page = await self.context.own_context.new_page()
+            try:
+                self._ua = await temp_page.evaluate("navigator.userAgent")
+            finally:
+                await temp_page.close()
+
     @property
     async def ua(self) -> str:
-        """
-        获取当前浏览器的真实 User-Agent
-        自动创建临时页面获取，用完关闭
-        """
-        if not self.browser:
-            raise RuntimeError("请先启动浏览器 start()")
+        """获取当前浏览器的真实 User-Agent（从缓存读取）"""
+        if not self._ua:
+            raise RuntimeError("请先启动浏览器 start()，或 UA 尚未初始化")
+        return self._ua
 
-        # 临时创建上下文 + 页面拿UA
-        context = await self.browser.new_context()
-        page = await context.new_page()
-
-        # 获取UA
-        ua = await page.evaluate("navigator.userAgent")
-
-        # 清理临时资源
-        await page.close()
-        await context.close()
-
-        return ua
+    async def new_browser(self,config=None,playwright=None):
+        return Playwright(config=config, playwright=playwright or self.own_playwright)
 
     async def new_page(self, **kwargs) -> Ljp_Page:
         return await self.context.new_page(**kwargs)
@@ -93,16 +96,18 @@ class Playwright(Ljp_BaseClass_Logger):
             self.context = None
             self.own_playwright = None
 
+
 class Ljp_Context(Ljp_BaseClass_Logger):  # noqa: N801
     def __init__(self, context: BrowserContext, browser: Playwright):
         super().__init__()
         self.own_context = context
         self.browser = browser
         self.start = False
-        self.cdp_verification_gate = AsyncVerificationGate(
+        self.cdp_verification_gate = AsyncVerification(
             self._check_cdp_response_meet_cf,
             self._handle_cdp_response_cf,
         )
+        self.init_()
 
     async def init_(self):
         config = self.browser.config
@@ -122,7 +127,7 @@ class Ljp_Context(Ljp_BaseClass_Logger):  # noqa: N801
         return await self.own_context.new_cdp_session(page.own_page)
 
     @staticmethod
-    def _response_text(response: Any) -> str:
+    def _response_text(response: dict) -> str:
         """提取 CDP/fetch 响应文本，用于识别 Cloudflare 验证页。"""
 
         if not isinstance(response, dict):
@@ -207,13 +212,7 @@ class Ljp_Page(Ljp_BaseClass_Logger, CF_Find,Request_need):  # noqa: N801
         return await self.own_page.evaluate(expression, **kwargs)
 
 
-    async def goto(
-        self,
-        url: str,
-        wait_until: Optional[Literal["commit", "domcontentloaded", "load", "networkidle"]] = 'domcontentloaded',
-        timeout: float | None = 10000,
-        referer=None,
-    ):
+    async def goto(self,url: str,wait_until: Optional[Literal["commit", "domcontentloaded", "load", "networkidle"]] = 'domcontentloaded',timeout: float | None = 10000,referer=None,):
         """通用跳转方法，带重试和错误处理"""
         try:
             await self.own_page.goto(url, wait_until=wait_until, timeout=timeout, referer=referer)

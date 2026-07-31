@@ -19,7 +19,7 @@ def ck(tx):
     return False
 
 async def cf(url):
-    from ljp_page.pc.edge.pydoll import Edge, ChromiumOptions
+    from ljp_page.request.edge.pydoll import Edge, ChromiumOptions
     profile_dir = (Path.cwd() / "edge_profile").resolve()
     profile_dir.mkdir(parents=True, exist_ok=True)
 

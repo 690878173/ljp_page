@@ -1,5 +1,9 @@
+import re
+
 from lxml import etree
 from typing import Any
+
+
 class Html:
     """Small HTML helper collection retained for backwards compatibility."""
 
@@ -10,7 +14,7 @@ class Html:
         return html_content
 
     @staticmethod
-    def save_file(html_content: str, path: str = "test.html") -> None:
+    def save(html_content: str, path: str = "test.html") -> None:
         with open(path, "w", encoding="utf-8") as file_handle:
             file_handle.write(Html.html_drop_script(html_content))
 
@@ -44,6 +48,17 @@ class Html:
     @staticmethod
     def xpath_ls(html: Any, xpath: str) -> str:
         return "\n".join(html.xpath(xpath))
+
+    @staticmethod
+    def extract_charset(content):
+        try:
+            html = content[:1024].decode("ascii", errors="ignore")
+            match = re.search(r'charset\s*=\s*["\']?([^"\'\s>]+)', html, re.I)
+            if match:
+                return match.group(1).strip()
+        except Exception:
+            return None
+        return None
 
 
 __all__ = ["Html"]

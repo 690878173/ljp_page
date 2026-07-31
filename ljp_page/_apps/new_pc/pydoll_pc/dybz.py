@@ -13,7 +13,7 @@ from ljp_page.ocr import Ocr
 ocr = Ocr()
 
 from ljp_page._module.request.brower.pydoll import Edge
-from ljp_page.pc.request import AsyncSession
+from ljp_page.request.request import AsyncSession
 class Md(Xs):
 
 

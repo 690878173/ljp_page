@@ -13,7 +13,7 @@ cookie = {}
 bt_url = ''
 
 async def cf(url):
-    from ljp_page.pc.edge.pydoll import Edge, CookieParam, ChromiumOptions
+    from ljp_page.request.edge.pydoll import Edge, CookieParam, ChromiumOptions
     profile_dir = (Path.cwd() / "edge_profile").resolve()
     profile_dir.mkdir(parents=True, exist_ok=True)
 
@@ -49,7 +49,7 @@ async def cf(url):
 url = "https://www.bz11111111.com/shuku/0-size-0-45.html"
 if __name__ == '__main__':
     asyncio.run(cf(url))
-    from ljp_page.pc.request import Requests
+    from ljp_page.request.request import Requests
 
     session = Requests().create_session()
     headers = {

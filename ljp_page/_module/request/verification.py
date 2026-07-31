@@ -1,19 +1,22 @@
-# 05-24-22-09-57
 from __future__ import annotations
-
 import asyncio
 import inspect
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Mapping
+from typing import TYPE_CHECKING, Any, Mapping,Callable, Awaitable, TypeVar, Generic
 
+from ljp_page._core.utils.other import f_mark
 from ljp_page._module.request.session.config import LjpResponse
 
 if TYPE_CHECKING:
     from ljp_page._module.request.session.session import ASession, AsyncSession
 
+T = TypeVar("T")
 
+
+
+@f_mark('考虑移除，仅使用下面的通用上下文')
 @dataclass(slots=True)
-class VerificationContext:
+class SessionVerificationContext:
     """响应验证上下文，供外部验证函数读取请求信息并更新会话状态。"""
 
     owner: "ASession"
@@ -27,8 +30,8 @@ class VerificationContext:
 
 
 @dataclass(slots=True)
-class GateVerificationContext:
-    """通用验证上下文，避免每个请求点重复编写三参 context_factory。"""
+class VerificationContext:
+    """验证上下文，仅内部使用。"""
 
     response: Any
     verify_attempt: int = 0
@@ -52,37 +55,36 @@ class GateVerificationContext:
             raise AttributeError(key) from exc
 
 
-class AsyncVerificationGate:
-    """通用异步验证门闸，适用于 aiohttp、Playwright/CDP 等任意请求来源。"""
+class AsyncVerification:
+    '''
+    拦截请求，检查是否需要验证 -> 需要验证 -> 其他请求等待，
 
+    执行请求完放行，同时只有一个请求执行验证，验证完所有请求重新请求
+    '''
     def __init__(
-        self,
-        checker: Any = None,
-        handler: Any = None,
-        *,
-        max_retries: int = 1,
-        result_applier: Any = None,
-    ) -> None:
+            self,
+            checker: Any,
+            handler: Any,
+            *,
+            max_retries: int = 1,
+            result_applier: Any = None,
+    ):
         self._checker = checker
         self._handler = handler
         self._max_retries = max(0, int(max_retries))
         self._result_applier = result_applier
+
         self._lock = asyncio.Lock()
-        self._ready = asyncio.Event()
-        self._ready.set()
+
+        self._door_ev = asyncio.Event()
+        self._door_ev.set()
+
         self._active_count = 0
-        self._active_idle = asyncio.Event()
-        self._active_idle.set()
+        self._no_active_ev = asyncio.Event()
+        self._no_active_ev.set()
         self._version = 0
 
-    def set_verification(
-        self,
-        checker: Any,
-        handler: Any,
-        *,
-        max_retries: int = 1,
-        result_applier: Any = None,
-    ) -> None:
+    def set_verification(self,checker,handler,*,max_retries: int = 1,result_applier: Any = None):
         """注册验证逻辑，checker 判断响应，handler 执行验证。"""
 
         self._checker = checker
@@ -98,33 +100,27 @@ class AsyncVerificationGate:
         self._handler = None
 
     @staticmethod
-    async def _await_if_needed(value: Any) -> Any:
+    async def to_await(value: Any) -> Any:
         if inspect.isawaitable(value):
             return await value
         return value
 
-    async def wait(self) -> int:
-        """请求发送前调用；若正在验证，则等待验证完成。"""
-
-        await self._ready.wait()
-        return self._version
-
     async def _need_verification(self, response: Any) -> bool:
         if self._checker is None:
             return False
-        return bool(await self._await_if_needed(self._checker(response)))
+        return bool(await self.to_await(self._checker(response)))
 
     async def _apply_result(self, result: Any, context: Any) -> None:
         if self._result_applier is None:
             return
-        await self._await_if_needed(self._result_applier(result, context))
+        await self.to_await(self._result_applier(result, context))
 
     async def _enter_send(self) -> int:
         """进入实际请求；验证开始后新请求会在这里等待。"""
 
-        await self._ready.wait()
+        await self._door_ev.wait()
         self._active_count += 1
-        self._active_idle.clear()
+        self._no_active_ev.clear()
         return self._version
 
     def _exit_send(self) -> None:
@@ -133,40 +129,42 @@ class AsyncVerificationGate:
         self._active_count -= 1
         if self._active_count <= 0:
             self._active_count = 0
-            self._active_idle.set()
+            self._no_active_ev.set()
 
-    async def _handle_verification(self, context: Any, version: int) -> None:
+    async def _handle_verification(self, context: Any, version: int) -> None|bool:
         if self._handler is None:
-            return
+            return False
 
-        await self._ready.wait()
+        await self._door_ev.wait()
         if self._version != version:
-            return
+            return False
 
         async with self._lock:
+
             if self._version != version:
-                return
+                return False
 
             # 验证期间暂停后续请求，防止多个任务同时刷新同一份状态。
-            self._ready.clear()
+            self._door_ev.clear()
             try:
                 # 等待已经进入 send() 的并发请求结束，再允许 handler 刷新页面或更新状态。
-                await self._active_idle.wait()
-                result = await self._await_if_needed(self._handler(context))
+                await self._no_active_ev.wait()
+                result = await self.to_await(self._handler(context))
                 await self._apply_result(result, context)
                 self._version += 1
+                return True
             finally:
-                self._ready.set()
+                self._door_ev.set()
+
 
     async def run(
         self,
-        send: Any,
+        send: Callable[[], Awaitable[T] | T],
         *,
         context: Mapping[str, Any] | None = None,
-        context_factory: Any = None,
         verify_response: bool = True,
         max_retries: int | None = None,
-    ) -> Any:
+    ) -> T:
         """包装一个实际请求任务，并在命中验证后自动重发当前请求。"""
 
         if max_retries is None:
@@ -178,9 +176,12 @@ class AsyncVerificationGate:
         while True:
             version = await self._enter_send()
             try:
-                response = await self._await_if_needed(send())
+                response = await self.to_await(send())
             finally:
                 self._exit_send()
+
+            if self._version != version:
+                continue
 
             if not verify_response or not await self._need_verification(response):
                 return response
@@ -188,17 +189,35 @@ class AsyncVerificationGate:
             if verify_attempt >= retry_limit:
                 return response
 
-            if context_factory is None:
-                verify_context = GateVerificationContext(
-                    response=response,
-                    verify_attempt=verify_attempt,
-                    version=version,
-                    extra=dict(context or {}),
-                )
-            else:
-                verify_context = context_factory(response, verify_attempt, version)
-            await self._handle_verification(verify_context, version)
-            verify_attempt += 1
+            verify_context = VerificationContext(
+                response=response,
+                verify_attempt=verify_attempt,
+                version=version,
+                extra=dict(context or {}),
+            )
+
+            ver_ok = await self._handle_verification(verify_context, version)
+            if ver_ok:
+                verify_attempt += 1
 
 
-__all__ = ["VerificationContext", "GateVerificationContext", "AsyncVerificationGate"]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+__all__ = ["SessionVerificationContext", "VerificationContext", "AsyncVerification"]

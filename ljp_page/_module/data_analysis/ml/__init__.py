@@ -1,6 +1,8 @@
 # 05-19-16-20-00
 from typing import TYPE_CHECKING
 
+from ljp_page._core import bind_lazy_exports
+
 if TYPE_CHECKING:
     from .base import *  # noqa: F403
     from .Classification import *  # noqa: F403
