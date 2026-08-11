@@ -12,6 +12,8 @@ from pydantic_core import PydanticUndefined
 
 from ljp_page._module.request.brower.pydoll import InvalidExtractionModel
 
+__all__ = ['ExtractionMetadata']
+
 #模块级注册表：存储由唯一 int 键控的 ExtractionMetadata。
 #Field() 注册元数据并将密钥存储在 pydantic 的 json_schema_extra 中。
 #ExtractionModel.get_extraction_fields() 读取密钥以检索元数据。

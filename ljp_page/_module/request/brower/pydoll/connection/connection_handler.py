@@ -18,6 +18,8 @@ from ljp_page._module.request.brower.pydoll.exceptions import (
 from base import CDPEvent, Response
 from ljp_page._module.request.brower.pydoll.utils import get_browser_ws_address
 
+__all__ = ['ConnectionHandler']
+
 if TYPE_CHECKING:
     from typing import Any, AsyncGenerator, Awaitable, Callable, Coroutine, Optional, Union
 

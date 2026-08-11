@@ -4,6 +4,9 @@ from typing import TYPE_CHECKING, Optional
 
 from base import Command
 from dom.methods import (
+
+__all__ = ['DomCommands']
+
     CollectClassNamesFromSubtreeParams,
     CopyToParams,
     DescribeNodeParams,

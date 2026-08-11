@@ -1,0 +1,290 @@
+import asyncio
+import threading
+import queue
+import time
+import atexit
+from pathlib import Path
+from typing import Optional, Tuple, TYPE_CHECKING
+from ljp_page.logger import logger
+
+from ljp_page._module.file.model import SyncFile, AioFile
+from ljp_page._core.utils.double_linked_list import ListNode, DoubleLinkedList
+
+
+class SyncFileWriter:
+    def __init__(self, max_queue_size: int = 8000, max_open_files=64, idle_timeout: float = 30.0):
+        self._queue: queue.Queue[Optional[tuple[str, str]]] = queue.Queue(maxsize=max_queue_size)
+        self._file_map: dict[str, tuple[SyncFile, ListNode[str]]] = {}
+        self._lru_list = DoubleLinkedList[str]()
+        self._thread: Optional[threading.Thread] = None
+        self._running = False
+
+        # NOTE LRU淘汰机制，避免长时间持有文件对象
+        self.max_open_files = max_open_files
+        self.idle_timeout = idle_timeout
+
+        atexit.register(self._atexit_cleanup)
+
+    def _atexit_cleanup(self):
+        if self._running:
+            logger.warning("FileWriteThread:检测到未手动stop，atexit兜底执行关闭，建议业务主动调用stop()")
+            self.stop(join=True)
+
+    def start(self):
+        """启动后台写线程"""
+        if self._running:
+            logger.warning("FileWriteThread 已经处于运行状态，无需重复启动")
+            return
+        self._running = True
+        self._thread = threading.Thread(target=self._worker_loop, daemon=True)
+        self._thread.start()
+        logger.info("FileWriteThread 写线程已启动")
+
+    def submit(self, path: Path | str, data: str):
+        """业务线程调用：提交写入任务，线程安全"""
+        p = Path(path).expanduser().resolve()
+        abs_path = str(p)
+        try:
+            # put会阻塞，如果队列满
+            self._queue.put((abs_path, data))
+        except Exception as e:
+            logger.error(f"提交写任务失败 path={abs_path} {e}")
+            raise
+
+    def stop(self, join: bool = True):
+        """优雅关闭：发送哨兵，等待消费完成，关闭所有文件"""
+        if not self._running:
+            logger.warning("FileWriteThread 未运行，无需停止")
+            return
+        logger.info("开始停止 FileWriteThread，等待队列任务处理完毕")
+        self._running = False
+        # 放入哨兵None
+        self._queue.put(None)
+        if join and self._thread is not None:
+            self._thread.join()
+            logger.info("FileWriteThread 线程已退出")
+
+    def __enter__(self):
+        self.start()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.stop(join=True)
+
+    def _try_evict(self):
+        now = time.time()
+        if len(self._file_map) <= self.max_open_files:
+            return
+        need_evict = len(self._file_map) - self.max_open_files
+
+        evicted = 0
+        while evicted < need_evict:
+            tail_node = self._lru_list.pop_back()
+            if tail_node is None:
+                break
+            path_key = tail_node.data
+            f, _ = self._file_map[path_key]
+            idle = now - f.last_write_ts
+            if idle >= self.idle_timeout:
+                # 满足超时，真正淘汰
+                try:
+                    f.close()
+                    del self._file_map[path_key]
+                    logger.debug(f"LRU淘汰 path={path_key}")
+                except Exception as e:
+                    logger.error(f"LRU关闭失败 {path_key} {e}")
+                evicted += 1
+            else:
+                # 这个还没超时，放回去，终止本轮淘汰
+                self._lru_list.push_front(tail_node)
+                break
+
+    def _worker_loop(self):
+        """仅在写线程内部运行"""
+        logger.debug("FileWriteThread worker 循环开始")
+        while True:
+            item = self._queue.get()
+            try:
+                # 收到哨兵，退出循环
+                if item is None:
+                    logger.debug("FileWriteThread 收到停止哨兵，准备退出")
+                    break
+                abs_path_str, content = item
+                # 没有就新建SyncFile
+                if abs_path_str not in self._file_map:
+                    logger.debug(f"新建文件实例 path={abs_path_str}")
+                    f = SyncFile(abs_path_str)
+                    node = ListNode(abs_path_str)
+                    self._lru_list.push_front(node)
+                    self._file_map[abs_path_str] = (f, node)
+                f, node = self._file_map[abs_path_str]
+                f.write(content)
+                self._lru_list.push_front(node)
+                self._try_evict()  # 写完执行LRU淘汰
+            except OSError as e:
+                abs_path_str = item[0] if item else ""
+                logger.error(f"文件写入IO异常 path={abs_path_str} {e}")
+            except Exception as e:
+                logger.error(f"写线程处理任务异常 item={item} {e}")
+            finally:
+                self._queue.task_done()
+
+        # 退出前：关闭全部打开文件
+        logger.debug(f"关闭全部打开文件，打开文件数量:{len(self._file_map)}")
+        for file_path, (f, _node) in list(self._file_map.items()):
+            try:
+                f.close()
+            except Exception as e:
+                logger.error(f"关闭文件失败 path={file_path} {e}")
+        self._file_map.clear()
+        self._lru_list.clear()
+        logger.debug("FileWriteThread worker 循环结束")
+
+# NOTE start启动后使用subnit提交路径与内容，自动写入，完成后提交None然后等待返回值future对象，一般提交不需要
+class AsyncFileWriter:
+    def __init__(
+        self,
+        max_queue_size: int = 10000,
+        max_open_files: int = 64,
+        idle_timeout: float = 30.0
+    ):
+        self._queue: asyncio.Queue[Optional[Tuple[str, Optional[str], asyncio.Future]]] = asyncio.Queue(maxsize=max_queue_size)
+        self._file_map: dict[str, tuple[AioFile, ListNode[str]]] = {}
+        self._lru_list = DoubleLinkedList[str]()
+        self._task: Optional[asyncio.Task] = None
+        self._running = False
+
+        self.max_open_files = max_open_files
+        self.idle_timeout = idle_timeout
+
+    def start(self):
+        if self._running:
+            logger.warning("AsyncFileWriter 已经运行，无需重复启动")
+            return
+        self._running = True
+        self._task = asyncio.create_task(self._worker_loop())
+        logger.info("AsyncFileWriter worker协程已启动")
+
+    async def submit(self, path: Path | str, data: Optional[str]) -> asyncio.Future:
+        """
+        提交任务
+        :param path: 文件路径
+        :param data: 字符串为写入内容；None代表关闭该文件
+        :return: Future，可await等待任务完成；普通写入可丢弃，关闭建议await
+        """
+        if not self._running:
+            raise RuntimeError("AsyncFileWriter 未start")
+        fut = asyncio.Future()
+        p = Path(path).expanduser().resolve()
+        abs_path = str(p)
+        try:
+            await self._queue.put((abs_path, data, fut))
+        except Exception as e:
+            logger.error(f"提交写任务失败 path={abs_path} {e}")
+            raise
+        return fut
+
+    async def stop(self, join: bool = True):
+        if not self._running:
+            logger.warning("AsyncFileWriter 未运行，无需停止")
+            return
+        logger.info("开始停止 AsyncFileWriter，等待队列任务处理完毕")
+        self._running = False
+        await self._queue.put(None)
+        if join and self._task is not None:
+            await self._task
+            logger.info("AsyncFileWriter worker协程已退出")
+
+    def _try_evict(self) -> list[Tuple[str, AioFile]]:
+        evict_list: list[Tuple[str, AioFile]] = []
+        now = time.time()
+        current_size = len(self._file_map)
+        if current_size <= self.max_open_files:
+            return evict_list
+        need_evict = current_size - self.max_open_files
+
+        evicted = 0
+        while evicted < need_evict:
+            tail_node = self._lru_list.pop_back()
+            if tail_node is None:
+                break
+            path_key = tail_node.data
+            if path_key not in self._file_map:
+                continue
+            f, _ = self._file_map[path_key]
+            idle = now - f.last_write_ts
+            if idle >= self.idle_timeout:
+                evict_list.append((path_key, f))
+                evicted += 1
+            else:
+                self._lru_list.push_front(tail_node)
+                break
+        return evict_list
+
+    async def _worker_loop(self):
+        logger.debug("AsyncFileWriter worker 协程启动")
+        while True:
+            item = await self._queue.get()
+            fut: Optional[asyncio.Future] = None
+            try:
+                if item is None:
+                    logger.debug("AsyncFileWriter 收到哨兵，准备退出")
+                    break
+                abs_path_str, content, fut = item
+
+                if abs_path_str not in self._file_map:
+                    logger.debug(f"新建AioFile实例 path={abs_path_str}")
+                    f = AioFile(abs_path_str)
+                    node = ListNode(abs_path_str)
+                    self._lru_list.push_front(node)
+                    self._file_map[abs_path_str] = (f, node)
+
+                f, node = self._file_map[abs_path_str]
+
+                if content is None:
+                    # 关闭任务
+                    await f.close()
+                    del self._file_map[abs_path_str]
+                    self._lru_list.remove(node)
+                    logger.debug(f"AsyncFileWriter 主动关闭 path={abs_path_str}")
+                else:
+                    await f.write(content)
+                    self._lru_list.push_front(node)
+
+                # LRU淘汰
+                evict_list = self._try_evict()
+                for path_key, f_evict in evict_list:
+                    try:
+                        await f_evict.close()
+                        del self._file_map[path_key]
+                        logger.debug(f"AsyncFileWriter LRU淘汰 path={path_key}")
+                    except Exception as e:
+                        logger.error(f"AsyncFileWriter LRU关闭失败 {path_key} {e}")
+
+                if fut is not None and not fut.done():
+                    fut.set_result(None)
+
+            except OSError as e:
+                if fut is not None and not fut.done():
+                    fut.set_exception(e)
+                abs_path_str = item[0] if (item and isinstance(item,tuple)) else ""
+                logger.error(f"异步写入IO异常 path={abs_path_str} {e}")
+            except Exception as e:
+                if fut is not None and not fut.done():
+                    fut.set_exception(e)
+                logger.error(f"AsyncFileWriter处理任务异常 item={item} {e}")
+            finally:
+                self._queue.task_done()
+
+        logger.debug(f"AsyncFileWriter 关闭全部文件，count={len(self._file_map)}")
+        for file_path, (f, _node) in list(self._file_map.items()):
+            try:
+                await f.close()
+            except Exception as e:
+                logger.error(f"AsyncFileWriter关闭文件失败 path={file_path} {e}")
+        self._file_map.clear()
+        self._lru_list.clear()
+        logger.debug("AsyncFileWriter worker协程结束")
+
+
+__all__ = ['SyncFileWriter', 'AsyncFileWriter']

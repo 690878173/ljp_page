@@ -4,6 +4,8 @@ import asyncio
 
 from typing import TYPE_CHECKING
 
+__all__ = ['CommandsManager']
+
 if TYPE_CHECKING:
     from base import Command
 

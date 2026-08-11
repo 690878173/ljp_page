@@ -1,4 +1,3 @@
-# 03-26-21-03-00
 from __future__ import annotations
 
 from concurrent.futures import Future
@@ -7,8 +6,10 @@ from typing import Any, cast, TYPE_CHECKING
 from .ljp_threadpool import ThreadPool
 from .base import BaseBackend
 if TYPE_CHECKING:
-    from ljp_page._module.runtime.task import BindTask, TaskSubmitConfig
+    from ljp_page._module.tools.bind import BindTask
+    from ljp_page._module.runtime.task import TaskSubmitConfig
 
+__all__ = ["ThreadBackend"]
 
 class ThreadBackend(BaseBackend):
     """线程后端：复用旧版 ThreadPool。"""
@@ -37,10 +38,8 @@ class ThreadBackend(BaseBackend):
         return cast(
             Future[Any],
             self.pool.submit(
-                bound_task.target,
-                *bound_task.args,
+                bound_task.call,
                 task_id=config.task_id,
-                **bound_task.kwargs,
             ),
         )
 

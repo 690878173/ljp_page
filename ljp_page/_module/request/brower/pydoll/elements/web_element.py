@@ -50,6 +50,9 @@ from runtime.methods import (
 )
 from runtime.types import CallArgument
 from ljp_page._module.request.brower.pydoll.utils import (
+
+__all__ = ['WebElement']
+
     decode_base64_to_bytes,
     extract_text_from_html,
     is_script_already_function,

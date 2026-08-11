@@ -7,6 +7,8 @@ from ljp_page._module.request.brower.pydoll.browser.interfaces import BrowserOpt
 from ljp_page._module.request.brower.pydoll.browser.options import ChromiumOptions
 from ljp_page._module.request.brower.pydoll.exceptions import InvalidOptionsObject
 
+__all__ = ['ChromiumOptionsManager']
+
 if TYPE_CHECKING:
     from ljp_page._module.request.brower.pydoll.browser.options import Options
 

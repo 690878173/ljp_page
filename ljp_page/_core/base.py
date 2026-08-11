@@ -3,8 +3,9 @@ from __future__ import annotations
 from typing import Any
 from ljp_page._core.logger import DEFAULT_LEVEL_ALIASES
 from .logger import logger
-class Ljp_BaseClass_Logger:
 
+
+class Ljp_BaseClass_Logger:
     def __init__(self):
         self.logger = logger
 

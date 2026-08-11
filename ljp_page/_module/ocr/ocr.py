@@ -2,6 +2,8 @@ from ddddocr import DdddOcr
 import cv2
 import numpy as np
 
+__all__ = ["Ocr"]
+
 class Ocr:
     def __init__(self, ocr: bool = True, det: bool = False, old: bool = False, beta: bool = False,
                  use_gpu: bool = False, device_id: int = 0,

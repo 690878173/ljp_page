@@ -42,6 +42,8 @@ from network.har_types import (
 )
 from network.types import ResourceType
 
+__all__ = ['HarRecorder', 'HarCapture']
+
 if TYPE_CHECKING:
     from ljp_page._module.request.brower.pydoll.browser.tab import Tab
     from network.methods import GetResponseBodyResponse

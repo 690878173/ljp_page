@@ -4,6 +4,9 @@ from typing import TYPE_CHECKING, Optional
 
 from base import Command
 from input.methods import (
+
+__all__ = ['InputCommands']
+
     DispatchDragEventParams,
     DispatchKeyEventParams,
     DispatchMouseEventParams,

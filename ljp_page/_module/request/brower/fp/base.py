@@ -6,7 +6,7 @@ import random
 from typing import Any, Awaitable, Callable, Iterator,Protocol, Any, Awaitable, Union
 
 from ljp_page._core.utils.other import f_mark
-
+from ljp_page._core.utils.async_tool import resolve_value
 from .dom import DomCommands, InputCommands, RuntimeCommands
 
 CdpSend = Callable[..., Awaitable[dict[str, Any]]]
@@ -163,7 +163,7 @@ class FP_DOM:  # noqa: N801
         return shadow_roots
 
     @classmethod
-    @f_mark("判断 CDP 节点是否为目标复选框元素")
+    @f_mark("判断 CDP 节点是否为目标复选框元素,目标span且class属性为指定类属性")
     def _is_checkbox_node(cls, node: dict[str, Any]) -> bool:
         """判断 CDP 节点是否为目标复选框元素。"""
         attrs = cls.attrs(node)
@@ -191,12 +191,7 @@ class FP_DOM:  # noqa: N801
 
     @classmethod
     @f_mark("轮询查找 shadow root")
-    async def cdp_find_shadow_root(
-        cls,
-        cdp_session,
-        timeout: float = 0,
-        poll_interval: float = 0.3,
-    ) -> dict[str, Any] | None:
+    async def cdp_find_shadow_root(cls,cdp_session,timeout: float = 0,poll_interval: float = 0.3,) -> dict[str, Any] | None:
         """轮询查找 shadow root。"""
         start = asyncio.get_event_loop().time()
         while True:
@@ -276,13 +271,13 @@ class PageHost(Protocol):
     """FP_Find 需要的宿主能力"""
 
     @property
-    def title(self) -> Union[str, Awaitable[str]]: ...
+    async def title(self) -> Union[str, Awaitable[str]]: ...
 
     @property
     def frames(self) -> Union[list, Awaitable[list]]: ...
 
     @property
-    def cookies(self) -> Union[list, Awaitable[list]]: ...
+    async def cookies(self) -> Union[list, Awaitable[list]]: ...
 
     async def get_cdp_session(self, own=None) -> Any: ...
 
@@ -301,22 +296,14 @@ class FP_Find:  # noqa: N801
     def __init__(self,host: PageHost) -> None:
         self._host = host
 
-    async def to_await(self, value):
-        """兼容属性、协程属性和普通/异步方法三种宿主写法。"""
-        if callable(value):
-            value = value()
-        if hasattr(value, "__await__"):
-            return await value
-        return value
-
     async def _get_title(self) -> str:
-        return await self.to_await(self._host.title)
+        return await resolve_value(self._host.title)
 
     async def _get_frames(self):
-        return await self.to_await(self._host.frames)
+        return await resolve_value(self._host.frames)
 
     async def _get_cookies(self):
-        return await self.to_await(self._host.cookies)
+        return await resolve_value(self._host.cookies)
 
     async def has_cookie(self) -> bool:
         return bool(await self._get_cookies())
@@ -338,7 +325,7 @@ class FP_Find:  # noqa: N801
         return self._DOM.as_cdp_session(await self._host.get_cdp_session(own))
 
     async def get_frame_session(self):
-        frame = await self.find_frame(self._DOM._DOMAIN)
+        frame = await self.find_frame()
         return await self._get_cdp_session(frame)
 
     async def find_frame(self,timeout: float = 10) -> Any:
@@ -368,6 +355,7 @@ class FP_Find:  # noqa: N801
         return session, checkbox
 
     async def _cf(self, timeout: float = 10):
+        timeout = float(timeout)
         session = None
         try:
             await self.cdp_find_shadow_root(timeout=timeout)

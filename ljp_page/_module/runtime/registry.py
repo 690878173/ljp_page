@@ -9,6 +9,8 @@ from typing import Any
 from .task import Task
 
 
+__all__ = ['TaskRegistryStats', 'TaskRegistry']
+
 @dataclass(slots=True)
 class TaskRegistryStats:
     """统一任务注册表统计信息。"""
@@ -148,18 +150,19 @@ class TaskRegistry:
         return handle.result(timeout=timeout)
 
     def wait_all_tasks(self, timeout: float | None = None) -> list[Any]:
-        """等待当前可见任务结束。"""
+        """等待当前可见任务结束，保持注册顺序。"""
         with self._lock:
-            handles = list(
-                {
-                    task_id: handle
-                    for task_id, handle in [
-                        *self._active_handles.items(),
-                        *self._history_handles.items(),
-                    ]
-                }.values()
-            )
-        return [handle.result(timeout=timeout) for handle in handles]
+            seen: set[str] = set()
+            ordered: list[Task[Any]] = []
+            for handle in self._active_handles.values():
+                if handle.task_id not in seen:
+                    seen.add(handle.task_id)
+                    ordered.append(handle)
+            for handle in self._history_handles.values():
+                if handle.task_id not in seen:
+                    seen.add(handle.task_id)
+                    ordered.append(handle)
+        return [handle.result(timeout=timeout) for handle in ordered]
 
     def get_stats(self) -> dict[str, int]:
         """返回统一统计快照。"""

@@ -327,6 +327,8 @@ def decrypt_vod_data(encrypted_hex: str, key_raw: str = "3863270olZElm") -> Opti
         print(f"解密异常: {e}")
         return None
 
+
+__all__ = ['AESCipher']
 if __name__ == '__main__':
 
     aes = AESCipher()

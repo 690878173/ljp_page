@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import threading
+from collections import OrderedDict
 from concurrent.futures import Future
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
@@ -35,23 +36,30 @@ class AsyncStats:
 class Async(Ljp_BaseClass_Logger):
     """在后台线程维护事件循环的异步运行时。"""
 
+    # 默认历史任务保留上限，防止内存泄漏。
+    _DEFAULT_HISTORY_LIMIT = 1000
+
     def __init__(
         self,
         mode: int = 1,
         logger: Any = None,
+        *,
+        history_limit: int = _DEFAULT_HISTORY_LIMIT,
     ) -> None:
         super().__init__()
         self.logger = logger
-        self.mode = mode
+        self.mode = mode  # 0=daemon, 1=non-daemon（保留兼容，推荐用 daemon 参数）
 
         self.loop: asyncio.AbstractEventLoop | None = None
         self.loop_thread: threading.Thread | None = None
 
         self._started = threading.Event()
+        self._stopped = threading.Event()
         self._lock = threading.RLock()
         self._task_seq = 0
         self._tasks: dict[str, Future[Any]] = {}
-        self._task_history: dict[str, Future[Any]] = {}
+        self._task_history: OrderedDict[str, Future[Any]] = OrderedDict()
+        self._history_limit = max(1, history_limit)
         self._stats = AsyncStats()
 
         self._start_loop()
@@ -61,6 +69,7 @@ class Async(Ljp_BaseClass_Logger):
         asyncio.set_event_loop(loop)
         with self._lock:
             self.loop = loop
+        self._stopped.clear()
         self._started.set()
 
         try:
@@ -76,6 +85,7 @@ class Async(Ljp_BaseClass_Logger):
             loop.close()
             with self._lock:
                 self.loop = None
+            self._stopped.set()
 
     def _start_loop(self) -> None:
         with self._lock:
@@ -108,6 +118,12 @@ class Async(Ljp_BaseClass_Logger):
             loop.call_soon_threadsafe(loop.stop)
 
         if thread is not None and thread.is_alive() and threading.current_thread() is not thread:
+            # 等待事件循环线程完成 finally 清理（取消pending task、关闭asyncgen等）
+            if not self._stopped.wait(timeout=timeout):
+                self.warning(
+                    f"异步事件循环线程未在 {timeout}s 内完成清理，强制 join",
+                    self.stop.__name__,
+                )
             thread.join(timeout=timeout)
 
     def is_running(self) -> bool:
@@ -133,6 +149,9 @@ class Async(Ljp_BaseClass_Logger):
             with self._lock:
                 self._tasks.pop(task_id, None)
                 self._task_history[task_id] = done_future
+                # 裁剪历史，防止内存泄漏
+                while len(self._task_history) > self._history_limit:
+                    self._task_history.popitem(last=False)
                 if done_future.cancelled():
                     self._stats.cancelled += 1
                 else:
@@ -189,7 +208,12 @@ class Async(Ljp_BaseClass_Logger):
             future.add_done_callback(_cb)
 
         if await_result:
-            return future.result()
+            if timeout is None:
+                self.warning(
+                    "await_result=True 但未设置 timeout，可能永久阻塞",
+                    self.submit.__name__,
+                )
+            return future.result(timeout=timeout)
         return future
 
     def submit_s(
@@ -215,7 +239,7 @@ class Async(Ljp_BaseClass_Logger):
             futures.append(future)
 
         if await_result:
-            return [future.result() for future in futures]
+            return [future.result(timeout=timeout) for future in futures]
         return futures
 
     async def submit_inside(self, coro: Awaitable[Any]) -> Any:

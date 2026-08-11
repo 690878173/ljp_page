@@ -1,6 +1,8 @@
 from enum import Enum, auto
 
 
+__all__ = ['By', 'PageLoadState', 'ScrollPosition', 'Scripts', 'Key', 'BrowserType', 'TypoType']
+
 class By(str, Enum):
     CSS_SELECTOR = 'css'
     XPATH = 'xpath'

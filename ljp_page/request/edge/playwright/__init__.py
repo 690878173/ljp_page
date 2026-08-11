@@ -1,8 +1,15 @@
-# 05-19-16-20-00
 from typing import TYPE_CHECKING
 
-from ljp_page.request.edge.playwright.playwright import __all__ as __all__
-from ljp_page.request.edge.playwright.playwright import __getattr__ as __getattr__
-
 if TYPE_CHECKING:
-    from ljp_page.request.edge.playwright.playwright import *
+    from ljp_page._module.request.brower.playwright import *
+
+from ljp_page._module.request.brower.playwright import __all__,__getattr__ as _g
+
+def __getattr__(name):
+    if name.startswith("__") and name.endswith("__"):
+        raise AttributeError(name)
+    obj = _g(name)
+    globals()[name] = obj
+    return obj
+
+

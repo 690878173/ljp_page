@@ -5,10 +5,11 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Mapping,Callable, Awaitable, TypeVar, Generic
 
 from ljp_page._core.utils.other import f_mark
-from ljp_page._module.request.session.config import LjpResponse
+from ljp_page._module.request.session.models import LjpResponse
 
 if TYPE_CHECKING:
-    from ljp_page._module.request.session.session import ASession, AsyncSession
+    from ljp_page._module.request.session.async_client import AsyncSession
+    from ljp_page._module.request.session.pool import SessionPool
 
 T = TypeVar("T")
 
@@ -19,7 +20,7 @@ T = TypeVar("T")
 class SessionVerificationContext:
     """响应验证上下文，供外部验证函数读取请求信息并更新会话状态。"""
 
-    owner: "ASession"
+    owner: "SessionPool"
     session: "AsyncSession"
     response: LjpResponse
     method: str

@@ -27,13 +27,13 @@ class CrawlerRuntime(Ljp_BaseClass):
         self.config = config
 
         # 避免在模块导入阶段触发 _runtime 子系统的重依赖。
-        from ljp_page._module.runtime.ljp_exc import LJPExc
+        from ljp_page._module.runtime.exc import LJPExc
 
         self.exc = LJPExc(
             logger=logger,
             thread_max_workers=config.thread_max_workers,
-            async_outer_concurrent=config.async_outer_concurrent,
-            async_inner_concurrent=config.async_inner_concurrent,
+            sem1_concurrent=config.async_outer_concurrent,
+            sem2_concurrent=config.async_inner_concurrent,
         )
 
     @property

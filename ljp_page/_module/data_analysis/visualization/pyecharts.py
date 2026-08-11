@@ -4,6 +4,8 @@ import numpy as np
 import pandas as pd
 import random
 
+__all__ = ['Pyecharts']
+
 class Pyecharts:
     def __init__(self):
         pass

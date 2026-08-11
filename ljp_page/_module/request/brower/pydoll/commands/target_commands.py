@@ -4,6 +4,9 @@ from typing import TYPE_CHECKING, Optional
 
 from base import Command
 from target.methods import (
+
+__all__ = ['TargetCommands']
+
     ActivateTargetParams,
     AttachToBrowserTargetParams,
     AttachToTargetParams,

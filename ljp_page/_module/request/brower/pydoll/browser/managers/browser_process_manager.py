@@ -5,6 +5,8 @@ from typing import Callable, Optional
 
 
 
+__all__ = ['BrowserProcessManager']
+
 class BrowserProcessManager:
     """管理 CDP 自动化的浏览器进程生命周期。
 

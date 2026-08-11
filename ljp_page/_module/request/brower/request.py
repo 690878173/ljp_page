@@ -15,8 +15,6 @@ from ljp_page._core.utils.other import f_mark
 if TYPE_CHECKING:
     from .protocol.fetch.types import HeaderEntry
 
-
-
 from .constants import Scripts
 
 class Request_need(ABC):
@@ -48,7 +46,7 @@ class Request:
         - 保留浏览器的自动标头（User-Agent、Accept 等）
         - Cookie 由浏览器自动管理"""
 
-    def __init__(self, page:Request_need):
+    def __init__(self, page:Request_need,):
         self.page = page
 
     async def get(self,url: str,params: Optional[dict[str, str]] = None, **kwargs,):
@@ -166,13 +164,6 @@ class Request:
             - 自动包含浏览器cookie
             - CORS 策略由浏览器强制执行
             - 身份验证标头从浏览器会话中保留"""
-        check_fp = bool(kwargs.pop("check_fp", True))
-        verify_response = bool(kwargs.pop("verify_response", check_fp))
-        verify_max_retries = kwargs.pop("verify_max_retries", None)
-        cf_refresh = bool(kwargs.pop("cf_refresh", True))
-        cf_time_to_wait_captcha = kwargs.pop("cf_time_to_wait_captcha", 5)
-        cf_max_retries = kwargs.pop("cf_max_retries", 3)
-        cf_wait_after_click = kwargs.pop("cf_wait_after_click", 30)
 
         final_url = self._build_url_with_params(url, params)
         options = self._build_request_options(method, headers, json, data, **kwargs)
@@ -182,40 +173,16 @@ class Request:
             f'headers={bool(headers)}, json={json is not None}, data={data is not None}'
         )
         try:
-            async def send():
-                return await self._execute_fetch_request(final_url, options)
+            send = self.build_send(final_url,options)
+            result = await send()
 
-            verification_gate = getattr(self.page, "cdp_verification_gate", None)
-            if verification_gate is None:
-                result = await send()
-            else:
-                # CDP/fetch 请求统一走验证门闸，命中验证页后由页面完成验证再重发当前请求。
-                result = await verification_gate.run(
-                    send,
-                    context={
-                        "page": self.page,
-                        "request": self,
-                        "method": method.upper(),
-                        "url": url,
-                        "final_url": final_url,
-                        "params": params,
-                        "options": options,
-                        "cf_refresh": cf_refresh,
-                        "cf_time_to_wait_captcha": cf_time_to_wait_captcha,
-                        "cf_max_retries": cf_max_retries,
-                        "cf_wait_after_click": cf_wait_after_click,
-                    },
-                    verify_response=verify_response,
-                    max_retries=verify_max_retries,
-                )
-
-            if isinstance(result, dict) and (result.get("error") or "content" not in result):
-                raise HTTP_Fetch_error(str(result.get("error") or "响应缺少 content 字段"))
-            return result
+            return self._check_response(result)
 
         except Exception as exc:
             logger.error(f'Request failed: {exc}')
             raise HTTP_Fetch_error(f'Request failed: {str(exc)}') from exc
+
+    # ── URL 构建 ──
 
     @staticmethod
     def _build_url_with_params(url: str, params: Optional[dict[str, str]]) -> str:
@@ -230,6 +197,8 @@ class Request:
             query[key] = [value]
 
         return urlunparse(parsed._replace(query=urlencode(query, doseq=True)))
+
+    # ── Options 构建 ──
 
     @f_mark('构建请求选项字典')
     def _build_request_options(self,method: str,headers: Optional[list[HeaderEntry]],json: Optional[dict[str, Any]],data: Optional[Union[dict, list, tuple, str, bytes]],**kwargs,) -> dict[str, Any]:
@@ -292,3 +261,23 @@ class Request:
             将标头名称映射到值的字典。"""
         logger.debug(f'Converting header entries to dictionary: headers={headers}')
         return {header['name']: header['value'] for header in headers}
+
+    def build_send(self,final_url,options):
+
+        async def send(override_options: Optional[dict] = None) -> dict:
+            # 合并覆盖参数（允许验证器在重试时动态修改请求）
+            merged_options = {**options, **(override_options or {})}
+
+            # 如果覆盖了 headers，进行深度合并（防止完全替换）
+            if override_options and isinstance(override_options.get("headers"), dict):
+                merged_options["headers"] = {**options.get("headers", {}), **override_options["headers"]}
+            return await self._execute_fetch_request(final_url, merged_options)
+
+
+        return send
+
+    @staticmethod
+    def _check_response(result):
+        if isinstance(result, dict) and (result.get("error") or "content" not in result):
+            raise HTTP_Fetch_error(str(result.get("error") or "响应缺少 content 字段"))
+        return result

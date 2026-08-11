@@ -4,6 +4,9 @@ from typing import TYPE_CHECKING, Optional
 
 from base import Command
 from emulation.methods import (
+
+__all__ = ['EmulationCommands']
+
     EmulationMethod,
     SetUserAgentOverrideParams,
 )

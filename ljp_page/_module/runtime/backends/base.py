@@ -5,8 +5,11 @@ from typing import Any, TYPE_CHECKING
 
 from ljp_page._core.base import Ljp_BaseClass_Logger
 
+__all__ = ['BaseBackend']
+
 if TYPE_CHECKING:
-    from ljp_page._module.runtime.task import BindTask, TaskSubmitConfig
+    from ljp_page._module.tools.bind import BindTask
+    from ljp_page._module.runtime.task import TaskSubmitConfig
 
 
 class BaseBackend(Ljp_BaseClass_Logger):

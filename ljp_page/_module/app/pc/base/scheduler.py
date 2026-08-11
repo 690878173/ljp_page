@@ -1,155 +1,149 @@
-# 05-19-16-00-00
-"""new_pc 队列调度组件。"""
+"""流水线调度器 —— P1→P2 生产者消费者队列。"""
 
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Any
+from typing import Any, Callable, Awaitable
 
 from ljp_page._core.base import Ljp_BaseClass_Logger
+from ljp_page._module.runtime import LJPExc
 
-if TYPE_CHECKING:
-    from ljp_page._module.runtime import LJPExc
-
-    from .model import Config
-    from .pc import BasePc
+from .config import Config
+from .controller import LifecycleController
 
 
-class Pc_Base_Scheduler(Ljp_BaseClass_Logger):
-    """封装 mode1/mode2/mode3 的生产消费队列。"""
+class PipelineScheduler(Ljp_BaseClass_Logger):
+    """管理 P1→P2 流水线的队列与工作循环。
 
-    P2_STOP = object()
+    通过回调与 BasePc 解耦：
+        on_fetch_p1(p1_id) -> P1Result
+        on_process_p2(p1_item) -> None
+    """
 
-    def __init__(self, owner: BasePc, config: Config, exc: LJPExc, logger: Any = None) -> None:
+    _STOP = object()
+
+    def __init__(
+        self,
+        config: Config,
+        controller: LifecycleController,
+        exc: LJPExc,
+        on_fetch_p1: Callable[[str], Awaitable[Any]],
+        on_process_p2: Callable[[Any], Awaitable[Any]],
+        logger: Any = None,
+    ) -> None:
         super().__init__()
         self.set_logger(logger)
-        self.owner = owner
         self.config = config
+        self.controller = controller
         self.exc = exc
-        self.p1_queue = asyncio.Queue()
-        self.p2_queue = asyncio.Queue()
-        self.p3_queue = asyncio.Queue()
+        self._on_fetch_p1 = on_fetch_p1
+        self._on_process_p2 = on_process_p2
+        self.p1_queue: asyncio.Queue[str] = asyncio.Queue()
+        self.p2_queue: asyncio.Queue[Any] = asyncio.Queue()
+
+    # ---- 队列操作 ----
 
     def reset_p1_queue(self) -> None:
-        self._clear_queue(self.p1_queue)
-        for p1_id in self.config.id_ls:
+        self._clear(self.p1_queue)
+        for p1_id in self.config.id_list:
             self.p1_queue.put_nowait(p1_id)
 
     def reset_p2_queue_from_config(self) -> None:
-        self._clear_queue(self.p2_queue)
-        for p2_id in self.config.id_ls:
+        self._clear(self.p2_queue)
+        for p2_id in self.config.id_list:
             self.p2_queue.put_nowait(p2_id)
 
     @staticmethod
-    def _clear_queue(queue: asyncio.Queue) -> None:
+    def _clear(q: asyncio.Queue) -> None:
         while True:
             try:
-                queue.get_nowait()
-                queue.task_done()
+                q.get_nowait()
+                q.task_done()
             except asyncio.QueueEmpty:
                 break
 
+    # ---- 工作循环 ----
 
-    async def p1_work_loop(self) -> None:
-        while True:
-            if self.owner.stop_flag:
-                break
-
-            await self.owner.pause_event.wait()
-
+    async def _p1_worker(self) -> None:
+        while not self.controller.stopped:
+            await self.controller.wait_if_paused()
             if self.p1_queue.empty():
                 break
-
             try:
                 p1_id = self.p1_queue.get_nowait()
             except asyncio.QueueEmpty:
                 await asyncio.sleep(0.1)
                 continue
-
             try:
-                res = await self.owner.get_p1_result(p1_id)
-                items = res.items
-                for item in items:
+                result = await self._on_fetch_p1(p1_id)
+                for item in result.items:
                     await self.p2_queue.put(item)
-                self.info(f"p1 {p1_id} 添加了{len(items)} 个任务")
+                self.info(f"P1 [{p1_id}] 产出 {len(result.items)} 个任务")
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
-                self.error(f"p1_work_loop 失败 {p1_id}: {exc}")
+                self.error(f"P1 worker 失败 [{p1_id}]: {exc}")
             finally:
                 self.p1_queue.task_done()
 
-    async def p2_work_loop(self) -> None:
+    async def _p2_worker(self) -> None:
         await asyncio.sleep(self.config.worker_startup_delay)
-        while True:
-            if self.owner.stop_flag:
-                break
-            await self.owner.pause_event.wait()
-
-            has_task = False
+        while not self.controller.stopped:
+            await self.controller.wait_if_paused()
             try:
-                p1_item = await asyncio.wait_for(
-                    self.p2_queue.get(),
-                    timeout=self.config.queue_get_timeout,
+                item = await asyncio.wait_for(
+                    self.p2_queue.get(), timeout=self.config.queue_get_timeout,
                 )
-                has_task = True
-                if p1_item is self.P2_STOP:
-                    self.debug("p2 worker 收到结束标识")
+                if item is self._STOP:
                     break
-                await self.owner.get_p2_result(p1_item)
+                await self._on_process_p2(item)
             except asyncio.TimeoutError:
                 continue
             except asyncio.CancelledError:
-                self.info("worker cancelled")
                 raise
             except Exception as exc:
-                self.error(f"worker error: {exc}")
+                self.error(f"P2 worker 失败: {exc}")
             finally:
-                if has_task:
-                    self.p2_queue.task_done()
+                self.p2_queue.task_done()
+
+    # ---- 模式入口 ----
 
     async def mode1(self) -> None:
-        p2_worker_count = max(1, self.config.max_workers)
+        """MODE1: 直接从 config.id_list 驱动 P2。"""
+        worker_count = max(1, self.config.max_workers)
         self.reset_p2_queue_from_config()
-        await self.put_p2_stop_flag(p2_worker_count)
+        await self._put_stop_flags(worker_count)
         handles = self.exc.submit_many(
-            [self.p2_work_loop() for _ in range(p2_worker_count)],
-            mode="async",
+            [self._p2_worker() for _ in range(worker_count)], mode="async",
         )
-        for handle in handles:
-            await handle
+        for h in handles:
+            await h
 
     async def mode2(self) -> None:
-        await self.run_pipeline(p1_worker_count=1, p2_worker_count=max(1, self.config.max_workers))
+        """MODE2: 单 P1 → 多 P2 串行流水线。"""
+        await self._run_pipeline(p1_count=1, p2_count=max(1, self.config.max_workers))
 
     async def mode3(self) -> None:
-        p1_worker_count = max(1, min(self.config.max_workers, len(self.config.id_ls or [])))
-        p2_worker_count = max(1, self.config.max_workers)
-        await self.run_pipeline(p1_worker_count=p1_worker_count, p2_worker_count=p2_worker_count)
+        """MODE3: 多 P1 → 多 P2 并行流水线。"""
+        p1_count = max(1, min(self.config.max_workers, len(self.config.id_list or [])))
+        p2_count = max(1, self.config.max_workers)
+        await self._run_pipeline(p1_count=p1_count, p2_count=p2_count)
 
-    async def run_pipeline(self, p1_worker_count: int, p2_worker_count: int) -> None:
+    async def _run_pipeline(self, p1_count: int, p2_count: int) -> None:
         p1_handles = self.exc.submit_many(
-            [self.p1_work_loop() for _ in range(p1_worker_count)],
-            mode="async",
+            [self._p1_worker() for _ in range(p1_count)], mode="async",
         )
         p2_handles = self.exc.submit_many(
-            [self.p2_work_loop() for _ in range(p2_worker_count)],
-            mode="async",
+            [self._p2_worker() for _ in range(p2_count)], mode="async",
         )
-
         try:
-            for handle in p1_handles:
-                await handle
+            for h in p1_handles:
+                await h
         finally:
-            await self.put_p2_stop_flag(p2_worker_count)
+            await self._put_stop_flags(p2_count)
+        for h in p2_handles:
+            await h
 
-        for handle in p2_handles:
-            await handle
-
-    async def put_p2_stop_flag(self, worker_count: int) -> None:
-        # 每个消费者都需要一个结束标识，避免只退出一个 worker。
-        for _ in range(worker_count):
-            await self.p2_queue.put(self.P2_STOP)
-
-
-__all__ = ["Pc_Base_Scheduler"]
+    async def _put_stop_flags(self, count: int) -> None:
+        for _ in range(count):
+            await self.p2_queue.put(self._STOP)

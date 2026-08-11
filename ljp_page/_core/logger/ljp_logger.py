@@ -39,22 +39,7 @@ DEFAULT_LEVEL_ALIASES: dict[str, int] = {
     value:name
     for name, value in DEFAULT_LEVEL_NAMES.items()
 }
-
-@dataclass
-class LogConfig:
-    """日志策略配置。"""
-    default_level: int = 5
-    enabled_levels: list[int] = field(default_factory=lambda: list(range(1, 20)))
-    level_names :Mapping[int, str] | None = None
-    aliases: dict[str, int] | None = None
-    log_file_path: str | None = None
-    output_console: bool = True
-    output_file: bool = True
-
-    def debug(self):
-        self.output_console = True
-        self.output_file = True
-        self.default_level = 1
+from ljp_page._core.model import LogConfig
 
 class Logger:
     """基于 loguru 实现的支持 1-20 数字级别与别名映射的日志器。"""

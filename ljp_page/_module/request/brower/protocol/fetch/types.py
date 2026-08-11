@@ -2,7 +2,7 @@ from enum import Enum
 
 from typing_extensions import NotRequired, TypedDict
 
-from network.types import ResourceType
+from ..network.types import ResourceType
 
 
 class RequestStage(str, Enum):

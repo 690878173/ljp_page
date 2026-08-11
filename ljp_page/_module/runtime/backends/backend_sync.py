@@ -6,8 +6,10 @@ from typing import Any,TYPE_CHECKING
 
 from ljp_page._module.runtime.backends.base import BaseBackend
 if TYPE_CHECKING:
-    from ljp_page._module.runtime.task import BindTask, TaskSubmitConfig
+    from ljp_page._module.tools.bind import BindTask
+    from ljp_page._module.runtime.task import TaskSubmitConfig
 
+__all__ = ["SyncBackend"]
 
 class SyncBackend(BaseBackend):
     """同步后端：在当前线程立即执行。"""

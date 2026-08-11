@@ -12,8 +12,9 @@ from .backend_sync import SyncBackend
 from .backend_thread import ThreadBackend
 
 if TYPE_CHECKING:
-    from ljp_page._module.runtime.task import BindTask
+    from ljp_page._module.tools.bind import BindTask
 
+__all__ = ["BackendRouter"]
 
 class BackendRouter:
     """负责 mode 解析与后端懒加载。"""

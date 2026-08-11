@@ -6,7 +6,7 @@ import sys
 from importlib import import_module
 from pathlib import Path
 from typing import Callable, Iterable, Literal
-
+from ..exceptions import Ljp_ImportError
 # 全局缓存池，避免同一个懒加载成员被反复导入。
 GLOBAL_MOD_CACHE: dict[str, dict[str, object]] = {}
 GLOBAL_EXPORT_CACHE: dict[str, dict[str, str]] = {}
@@ -79,14 +79,13 @@ def make_entity_getattr(pkg_name: str, mod_list: list[str]) -> Callable[[str], o
             cache[name] = sub_mod
             return sub_mod
 
-        raise AttributeError(f"{pkg_name} 找不到成员 {name}")
+        raise Ljp_ImportError(f"{pkg_name} 找不到成员 {name},确认是否使用__all__导出")
 
     return _getattr
 
 
 def make_proxy_getattr(target_module: str, export_names: Iterable[str]) -> Callable[[str], object]:
     """生成代理模块的懒加载入口，用于公开壳模块转发内部实现。"""
-
     exports = list(export_names)
     export_set = set(exports)
     cache = GLOBAL_MOD_CACHE.setdefault(target_module, {})
@@ -95,7 +94,7 @@ def make_proxy_getattr(target_module: str, export_names: Iterable[str]) -> Calla
         if name in cache:
             return cache[name]
         if name not in export_set:
-            raise AttributeError(f"{target_module} 没有成员 {name}")
+            raise Ljp_ImportError(f"{target_module} 没有成员 {name}")
         mod = import_module(target_module)
         obj = getattr(mod, name)
         cache[name] = obj
@@ -128,7 +127,7 @@ def mapped_module_exports(
             return cache[name]
         target_module = export_map.get(name)
         if target_module is None:
-            raise AttributeError(f"找不到成员 {name}")
+            raise Ljp_ImportError(f"找不到成员 {name}")
         mod = import_module(target_module)
         obj = getattr(mod, name)
         cache[name] = obj

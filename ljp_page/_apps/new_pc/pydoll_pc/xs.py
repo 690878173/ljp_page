@@ -5,7 +5,7 @@ from typing import Any
 
 from ljp_page._core._exceptions import HtmlParseError, MeetCheckError, No, Notfound
 
-from ljp_page._module.app.pc.base.model import P2Item,P3Item, P1Result,P2Result
+from ljp_page._module.app.pc.base import P2Item, P3Item, P1Result, P2Result
 
 from ljp_page._apps.new_pc.pydoll_pc.request_manager import PydollResponse, PcRequest,XsTabPool
 from ljp_page._module.app.pc.xs import XsManager,Xs

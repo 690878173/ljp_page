@@ -1,6 +1,8 @@
 from enum import Enum
 
 
+__all__ = ['DomMethod']
+
 class DomMethod(str, Enum):
     """DOM 域方法名称。"""
 

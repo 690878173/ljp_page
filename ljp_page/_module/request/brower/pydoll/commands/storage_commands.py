@@ -4,6 +4,9 @@ from typing import TYPE_CHECKING, Optional
 
 from base import Command
 from storage.methods import (
+
+__all__ = ['StorageCommands']
+
     ClearCookiesParams,
     ClearDataForOriginParams,
     ClearDataForStorageKeyParams,

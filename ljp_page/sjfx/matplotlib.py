@@ -1,7 +1,15 @@
 from typing import TYPE_CHECKING
 
-from ljp_page._core.utils.lazy_import import proxy_module_exports,bind_lazy_exports
-from ljp_page._module.data_analysis.visualization import __all__,__getattr__
+from ljp_page._module.data_analysis.visualization import __all__,__getattr__ as _g
 
 if TYPE_CHECKING:
     from ljp_page._module.data_analysis.visualization import *
+
+
+
+def __getattr__(name):
+    if name.startswith("__") and name.endswith("__"):
+        raise AttributeError(name)
+    obj = _g(name)
+    globals()[name] = obj
+    return obj

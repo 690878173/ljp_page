@@ -27,6 +27,10 @@ class BindTask:
             return str(self.target.__name__)
         return self.target.__class__.__name__
 
+    def __post_init__(self):
+        if inspect.isawaitable(self.target) and (self.args or self.kwargs):
+            raise TypeError("awaitable 对象不能再额外绑定参数")
+
     def is_async_target(self) -> bool:
         """判断目标是否应走异步后端。"""
         if inspect.isawaitable(self.target):

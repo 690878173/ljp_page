@@ -41,6 +41,9 @@ from page.methods import (
     StartScreencastParams,
 )
 from page.types import (
+
+__all__ = ['PageCommands']
+
     CompilationCacheParams,
     FontFamilies,
     FontSizes,

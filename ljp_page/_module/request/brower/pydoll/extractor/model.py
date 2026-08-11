@@ -10,6 +10,8 @@ from ljp_page._module.request.brower.pydoll import InvalidExtractionModel
 from ljp_page._module.request.brower.pydoll.extractor.field import ExtractionMetadata, pop_field_metadata
 
 
+__all__ = ['ExtractionModel']
+
 class ExtractionModel(BaseModel):
     """声明性提取模型的基类。
 

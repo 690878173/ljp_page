@@ -4,6 +4,9 @@ from typing import TYPE_CHECKING, Optional
 
 from base import Command
 from runtime.methods import (
+
+__all__ = ['RuntimeCommands']
+
     AddBindingParams,
     AwaitPromiseParams,
     CallFunctionOnParams,

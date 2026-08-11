@@ -3,6 +3,9 @@ from contextlib import suppress
 from ljp_page._module.request.brower.pydoll.browser.interfaces import Options
 from ljp_page._module.request.brower.pydoll.constants import PageLoadState
 from ljp_page._module.request.brower.pydoll.exceptions import (
+
+__all__ = ['ChromiumOptions']
+
     ArgumentAlreadyExistsInOptions,
     ArgumentNotFoundInOptions,
     WrongPrefsDict,

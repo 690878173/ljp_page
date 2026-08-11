@@ -6,7 +6,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from ljp_page._module.app.pc.base import Config, Mode
+from ljp_page._module.app.pc.base import Config, PipelineMode
 
 
 @dataclass
@@ -77,7 +77,7 @@ class YsConfig(Config):
         self.segment_retry = max(0, int(self.segment_retry))
         self.max_m3u8_depth = max(0, int(self.max_m3u8_depth))
         self.output_suffix = self.output_suffix.strip().lstrip(".") or "mp4"
-        if self.mode == Mode.MODE2 and not self.p1_url:
+        if self.mode == PipelineMode.MODE2 and not self.p1_url:
             raise ValueError("YsConfig 在 mode2 下必须配置 p1_url")
 
 

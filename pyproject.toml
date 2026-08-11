@@ -21,36 +21,99 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Visualization",
 ]
 
+# ============================================================
+# 核心依赖（仅保留最基础的、几乎所有模块都需要的）
+# 用户执行 pip install ljp-page 时只装这些
+# ============================================================
 dependencies = [
-    "requests>=2.31.0",
+    # 核心工具
+    "pydantic>=2.13.3",
+    "lxml>=4.9.0",              # XML/HTML 解析（io 和 request 都会用到）
+    "curl-cffi>=0.16.0",        # 网络请求核心（带 TLS 指纹）
+
+    # 数据库基础（轻量）
+    "pymysql>=1.2.0",
+    "dbutils>=3.1.2",
+
+    # 可选但已默认安装（多数场景需要）
+    "requests>=2.31.0",         # 同步请求（备胎）
+
+    # Jupyter 内核（数据分析用户友好）
+    "ipykernel>=7.2.0",
+]
+
+# ============================================================
+# 可选依赖（按功能模块分组）
+# 用户按需安装：pip install ljp-page[组名]
+# ============================================================
+[project.optional-dependencies]
+
+# ----- 高级网络请求（异步 + WebSocket）-----
+request = [
     "aiohttp>=3.9.0",
-    "lxml>=4.9.0",
+    "websockets>=16.0",
+    "aiofiles>=25.1.0",
+]
+
+# ----- 浏览器自动化（Playwright + 浏览器内核，约 500MB）-----
+automation = [
     "playwright>=1.40.0",
-    "pandas>=2.1.0",
+]
+
+# ----- JavaScript 执行 & 加密（常用于逆向）-----
+js_crypto = [
+    "pyexecjs>=1.5.1",
+    "pycryptodome>=3.23.0",
+]
+
+# ----- 验证码识别（ddddocr 约 20MB）-----
+ocr = [
+    "ddddocr>=1.6.1",
+]
+
+# ----- TLS 指纹增强（tls-client 有编译依赖）-----
+tls = [
+    "tls-client>=1.0.1",
+]
+
+# ----- 机器学习 + 数据分析（重型，约 500MB ~ 2GB）-----
+ml = [
     "numpy>=1.26.0",
-    "matplotlib>=3.8.0",
-    "pyecharts>=2.0.0",
-    "seaborn>=0.13.2",
+    "pandas>=2.1.0",
     "scikit-learn>=1.8.0",
     "xgboost>=3.2.0",
     "lightgbm>=4.6.0",
     "catboost>=1.2.10",
-    "ipykernel>=7.2.0",
-    "aiofiles>=25.1.0",
-    "pyexecjs>=1.5.1",
-    "pycryptodome>=3.23.0",
-    "pyqt6>=6.11.0",
-    "websockets>=16.0",
-    "ddddocr>=1.6.1",
-    "pydantic>=2.13.3",
-    "tls-client>=1.0.1",
-    "dotenv>=0.9.9",
-    "pymysql>=1.2.0",
-    "dbutils>=3.1.2",
+]
+
+# ----- 可视化（matplotlib 约 100MB，pyecharts 轻量）-----
+viz = [
+    "matplotlib>=3.8.0",
+    "seaborn>=0.13.2",
+    "pyecharts>=2.0.0",
+]
+
+# ----- SQLAlchemy ORM（重型，可选）-----
+orm = [
     "sqlalchemy>=2.0.51",
 ]
 
-[project.optional-dependencies]
+# ----- UI 桌面应用（PyQt6 约 200MB）-----
+ui = [
+    "pyqt6>=6.11.0",
+]
+
+# ----- 完整安装（不含 UI 和 ML，因为太大了）-----
+full = [
+    "ljp-page[request,automation,js_crypto,ocr,tls,viz,orm]",
+]
+
+# ----- 全部功能（警告：极大，可能超过 3GB）-----
+all = [
+    "ljp-page[full,ml,ui]",
+]
+
+# ----- 开发依赖 -----
 dev = [
     "pytest>=7.4.0",
     "pytest-asyncio>=0.21.0",
@@ -58,12 +121,18 @@ dev = [
     "ruff>=0.1.0",
 ]
 
+# ============================================================
+# 项目元信息
+# ============================================================
 [project.urls]
-Homepage = "https://github.com/yourusername/ljp-package"
-Documentation = "https://github.com/yourusername/ljp-package/blob/main/README.md"
-Repository = "https://github.com/yourusername/ljp-package"
-Issues = "https://github.com/yourusername/ljp-package/issues"
+Homepage = "https://github.com/690878173/ljp-package"
+Documentation = "https://github.com/690878173/ljp-package/blob/main/README.md"
+Repository = "https://github.com/690878173/ljp-package"
+Issues = "https://github.com/690878173/ljp-package/issues"
 
+# ============================================================
+# 构建配置
+# ============================================================
 [build-system]
 requires = ["setuptools>=68.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
@@ -78,6 +147,9 @@ include = ["ljp_page*"]
 [tool.setuptools.package-data]
 ljp_page = ["py.typed", "*.pyi", "**/*.pyi"]
 
+# ============================================================
+# 代码风格工具
+# ============================================================
 [tool.black]
 line-length = 100
 target-version = ["py312"]

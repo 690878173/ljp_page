@@ -9,6 +9,9 @@ from .base import FP_DOM, CDPBaseSession
 from .dom import DomCommands,InputCommands,RuntimeCommands
 
 
+from ljp_page._core.utils.other import f_mark
+
+
 class ShadowRootNotFound(RuntimeError):  # noqa: N818
     """未找到 shadow root。"""
 
@@ -29,6 +32,9 @@ class CDPNode:
     async def click(self) -> None:
         """模拟真实鼠标点击（含坐标计算和 JS 回退）。"""
         session = self.cdp_session
+        if await session.is_closed:
+            print('连接关闭了无法点击')
+            return
 
         # 1. 滚动到视图
         await session.send(**DomCommands.scroll_into_view_if_needed(node_id=self.node_id))
@@ -138,15 +144,20 @@ class ShadowRoot(CDPNode):
     """通用 ShadowRoot 包装器，只依赖 CDP 指令发送函数。"""
     mode: str = "open"
 
+    @classmethod
+    def from_node(cls, cdp_session, node, dom_cls=None):
+        return cls(
+            cdp_session=cdp_session,
+            node_id=node["nodeId"],
+            backend_node_id=node.get("backendNodeId"),
+            mode=node.get("shadowRootType", "open"),
+        )
+
     def __repr__(self) -> str:
         return f"ShadowRoot(mode={self.mode}, node_id={self.node_id})"
 
 
-
-
-
-
-
+@f_mark(f'考虑移除,没有用法')
 async def find_shadow_roots(
     cdp_session,
     *,

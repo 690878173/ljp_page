@@ -1,14 +1,14 @@
-# 05-19-16-20-00
-"""Public pyecharts helper exports."""
-
 from typing import TYPE_CHECKING
 
-from ljp_page._core.utils._lazy_import import proxy_module_exports
-
 if TYPE_CHECKING:
+    from ljp_page._module.data_analysis.visualization import *
     pass
 
-__getattr__, __all__ = proxy_module_exports(
-    "ljp_page._data_analysis.visualization.pyecharts",
-    ["Pyecharts"],
-)
+from ljp_page._module.data_analysis.visualization import __all__,__getattr__ as _g
+
+def __getattr__(name):
+    if name.startswith("__") and name.endswith("__"):
+        raise AttributeError(name)
+    obj = _g(name)
+    globals()[name] = obj
+    return obj

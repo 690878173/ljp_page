@@ -3,6 +3,8 @@ from dataclasses import dataclass, field
 
 from emulation.types import UserAgentBrandVersion, UserAgentMetadata
 
+__all__ = ['ParsedUserAgent', 'UserAgentParser']
+
 _CHROME_RE = re.compile(r'Chrome/(\d+)\.(\d+)\.(\d+)\.(\d+)')
 _EDGE_RE = re.compile(r'Edg/(\d+)\.(\d+)\.(\d+)\.(\d+)')
 

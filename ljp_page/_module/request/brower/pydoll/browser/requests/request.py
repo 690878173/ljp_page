@@ -28,6 +28,8 @@ from network.types import CookieParam, ResourceType
 
 from ljp_page.logger import logger
 
+__all__ = ['Request']
+
 RequestReceivedEvent = Union[
     ResponseReceivedEvent,
     ResponseReceivedExtraInfoEvent,

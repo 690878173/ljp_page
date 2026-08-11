@@ -9,6 +9,8 @@ from typing import Callable
 from ljp_page.logger import logger
 
 
+__all__ = ['TempDirectoryManager']
+
 class TempDirectoryManager:
     """管理 CDP 浏览器自动化的临时目录生命周期。
 

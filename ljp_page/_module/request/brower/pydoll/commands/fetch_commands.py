@@ -17,6 +17,8 @@ from fetch.methods import (
 )
 from fetch.types import RequestPattern
 
+__all__ = ['FetchCommands']
+
 if TYPE_CHECKING:
     from fetch.methods import (
         ContinueRequestCommand,

@@ -78,6 +78,9 @@ from ljp_page._module.request.brower.pydoll.utils import (
     has_return_outside_function,
 )
 from ljp_page._module.request.brower.pydoll import (
+
+__all__ = ['Tab', '_DownloadHandle']
+
     build_asset_filename,
     collect_frame_resources,
     filter_fetchable_resources,

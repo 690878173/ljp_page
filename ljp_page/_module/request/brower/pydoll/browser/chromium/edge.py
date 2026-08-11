@@ -9,6 +9,8 @@ from ljp_page._module.request.brower.pydoll.browser.managers import ChromiumOpti
 from ljp_page._module.request.brower.pydoll.exceptions import UnsupportedOS
 from ljp_page._module.request.brower.pydoll.utils import validate_browser_paths
 
+__all__ = ['Edge']
+
 if TYPE_CHECKING:
     from ljp_page._module.request.brower.pydoll.browser.options import Options
 

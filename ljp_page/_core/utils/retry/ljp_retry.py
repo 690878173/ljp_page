@@ -23,7 +23,7 @@ class RetryConfig:
     def __post_init__(self):
         self.delay = max(0.0, self.delay)
 
-    def calculate_delay(self, attempt: int) -> float:
+    def get_delay(self, attempt: int) -> float:
         if not self.delay:
             return 0
         return self.delay * (2**attempt if self.exponential_backoff else 1)
@@ -55,7 +55,7 @@ class RetryConfig:
         Args:
             attempt (int): The current attempt number
         """
-        wait_time = self.calculate_delay(attempt)
+        wait_time = self.get_delay(attempt)
         if wait_time:
             await asyncio.sleep(wait_time)
 

@@ -14,6 +14,8 @@ from ljp_page._module.request.brower.pydoll import FieldExtractionFailed
 from ljp_page._module.request.brower.pydoll.extractor.field import ExtractionMetadata
 from ljp_page._module.request.brower.pydoll import ExtractionModel
 
+__all__ = ['ExtractionEngine']
+
 if TYPE_CHECKING:
     from ljp_page._module.request.brower.pydoll.browser.tab import Tab
 

@@ -6,7 +6,7 @@ from urllib.parse import urljoin
 from ljp_page._core.exceptions import LjpBaseException
 from ljp_page._module.app.pc.base import Config
 from ljp_page._module.request.html import Html
-from ljp_page._module.app.pc.base.model import P1Result
+from ljp_page._module.app.pc.base import P1Result
 from ljp_page._module.app.pc.xs.xs import Xs
 from ljp_page.logger import logger
 
@@ -16,7 +16,7 @@ ocr = Ocr()
 
 from ljp_page._module.request.brower.playwright import Playwright
 
-from ljp_page._module.app.pc.base.manager.request_manager import PC_Base_Request
+from ljp_page._module.app.pc.base.request import BaseRequest
 
 
 class Pc_Ocr:
@@ -119,7 +119,7 @@ class Pc_Ocr:
         return "\n".join(line for line in result_lines if line is not None).replace('\n\n','\n')
 
 
-class Request(PC_Base_Request):
+class Request(BaseRequest):
 
     async def close(self):
         while not self.page_queue.empty():
@@ -313,14 +313,15 @@ class Md(Xs):
             raise LjpBaseException(message=f'出错') from e
 
 if __name__ == '__main__':
-     md = Md(config=Md.Config(mode='mode2',
+     md = Md(config=Md.Config(mode='mode1',
                               save_path='./res',
-                             base_url='https://www.bz777777777.com',
-                             p1_url='https://www.bz777777777.com/shuku/0-size-0-{}.html',
-                             p2_url='https://www.bz777777777.com{}',
-                             p3_url='https://www.bz777777777.com{}',
-                             start_id=236,
-                             end_id=270
+                             base_url='https://www.bz555555555.com',
+                             p1_url='https://www.bz555555555.com/shuku/0-size-0-{}.html',
+                             p2_url='https://www.bz555555555.com{}',
+                             p3_url='https://www.bz555555555.com{}',
+                              id_ls=['https://www.bz555555555.com/49/49326/','https://www.bz555555555.com/49/49326/','https://www.bz555555555.com/49/49326/','https://www.bz555555555.com/49/49326/']
+                             # start_id=236,
+                             # end_id=270
                              ))
                                 # 已完成一半270
      md.logger = logger

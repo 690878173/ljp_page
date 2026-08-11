@@ -3,6 +3,8 @@ from __future__ import annotations
 from ljp_page.logger import logger
 from typing import TYPE_CHECKING, Optional
 
+__all__ = ['ProxyManager']
+
 if TYPE_CHECKING:
     from ljp_page._module.request.brower.pydoll.browser.options import Options
 

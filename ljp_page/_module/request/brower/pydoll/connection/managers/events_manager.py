@@ -5,6 +5,9 @@ import asyncio
 from typing import TYPE_CHECKING, cast
 
 from page.events import (
+
+__all__ = ['EventsManager']
+
     JavascriptDialogOpeningEvent,
     JavascriptDialogOpeningEventParams,
 )

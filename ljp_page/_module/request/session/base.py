@@ -1,55 +1,126 @@
+"""BaseSession —— 适配器无关的会话基类。
+
+管理 config / headers / cookies / snapshot / 重试判定，不依赖具体 HTTP 库。
+子类只需实现 session 生命周期和 request 的 I/O 差异。
+"""
+
 from __future__ import annotations
 
-import asyncio
+import abc
+import inspect
+import logging
 import threading
-
-from abc import abstractmethod, ABC
+import uuid as _uuid
 from copy import deepcopy
 from typing import Any, Mapping
 
+from .config import LjpConfig
+from .models import AdapterResult, LjpResponse, RequestContext, split_kwargs
 
-import aiohttp
-import requests
-
-from ljp_page._core.base import Ljp_BaseClass_Logger
-from ljp_page._core.exceptions import NetworkException, TimeoutException
-from ljp_page._core.logger import Logger
-
-from .config import AdapterResponse, LjpConfig, LjpResponse, RequestContext,RequestConfig
+_logger = logging.getLogger(__name__)
 
 
+class BaseSession(abc.ABC):
+    """适配器无关的会话基类。"""
 
-class RequestModuleBase(Ljp_BaseClass_Logger,ABC):
-    def __init__(self, config: LjpConfig, logger: Logger = None):
-        super().__init__()
-        self.config = config
-        self.logger = logger
-
+    def __init__(
+        self,
+        config: LjpConfig | None = None,
+        *,
+        adapter: Any = None,
+    ) -> None:
+        self.config = config or LjpConfig()
         self._state_lock = threading.RLock()
+        self._adapter = adapter or self._default_adapter()
+        self._session: Any = None
+        self._headers_snapshot: dict[str, str] = {}
+        self._cookies_snapshot: dict[str, str] = {}
+        self._refresh_snapshots()
+
+    # ═══════════════════════════════════════════════════
+    # 子类必须覆写
+    # ═══════════════════════════════════════════════════
+
+    @staticmethod
+    @abc.abstractmethod
+    def _default_adapter() -> Any:
+        ...
+
+    @abc.abstractmethod
+    def ensure_session(self) -> Any:
+        ...
+
+    @abc.abstractmethod
+    def _close_impl(self) -> None:
+        ...
+
+    # ═══════════════════════════════════════════════════
+    # Snapshot
+    # ═══════════════════════════════════════════════════
+
+    def _refresh_snapshots(self) -> None:
+        with self._state_lock:
+            self._headers_snapshot = deepcopy(self.config.headers)
+            self._cookies_snapshot = deepcopy(self.config.cookies)
+
+    # ═══════════════════════════════════════════════════
+    # Headers & Cookies —— 统一变更入口
+    # ═══════════════════════════════════════════════════
+
+    def _on_state_changed(self, key: str) -> None:
+        """headers/cookies 变更后的统一同步：刷新快照 → 推到原生 session。"""
+        self._refresh_snapshots()
+        if self._session is not None:
+            snapshot = getattr(self, f"_{key}_snapshot")
+            getattr(self._adapter, f"update_{key}")(self._session, snapshot)
 
     @property
     def headers(self) -> dict[str, str]:
         with self._state_lock:
-            return deepcopy(self.config.request.headers)
+            return deepcopy(self.config.headers)
 
     @headers.setter
-    def headers(self, headers: dict[str, str]):
+    def headers(self, values: Mapping[str, str]) -> None:
         with self._state_lock:
-            self.config.request.headers = headers
+            self.config.headers = dict(values)
+        self._on_state_changed("headers")
 
-    def _resolve_timeout(self, timeout: Any) -> tuple[float, float]:
-        return self.config.timeout.resolve(timeout)
+    def update_headers(self, values: Mapping[str, str]) -> None:
+        with self._state_lock:
+            self.config.headers.update(dict(values))
+        self._on_state_changed("headers")
 
-    def _resolve_url(self, url: str) -> str:
-        return url
+    @property
+    def cookies(self) -> dict[str, str]:
+        with self._state_lock:
+            return deepcopy(self.config.cookies)
 
-    def _resolve_proxy(
-        self,
-        url: str,
-        proxy: str | None,
-        proxies: Mapping[str, str] | None,
-    ) -> tuple[dict[str, str] | None, str | None]:
-        return self.config.proxy.resolve(url,proxy,proxies)
+    @cookies.setter
+    def cookies(self, values: Mapping[str, str]) -> None:
+        with self._state_lock:
+            self.config.cookies = dict(values)
+        self._on_state_changed("cookies")
+
+    def update_cookies(self, values: Mapping[str, str]) -> None:
+        with self._state_lock:
+            self.config.cookies.update(dict(values))
+        self._on_state_changed("cookies")
+
+    def clear_cookies(self) -> None:
+        with self._state_lock:
+            self.config.cookies.clear()
+        self._on_state_changed("cookies")
+
+    # ═══════════════════════════════════════════════════
+    # 请求上下文构建
+    # ═══════════════════════════════════════════════════
+
+    def _merge_into(self, config_key: str, known: dict[str, Any]) -> dict[str, str]:
+        """深拷贝 config 值并与 kwargs 中的同名键合并。"""
+        merged = deepcopy(getattr(self.config, config_key))
+        custom = known.get(config_key) or {}
+        merged.update(custom)
+        return merged
 
     def _build_context(
         self,
@@ -60,214 +131,85 @@ class RequestModuleBase(Ljp_BaseClass_Logger,ABC):
         attempt: int,
         native_session: Any = None,
     ) -> RequestContext:
-        request_kwargs = dict(kwargs)
-        custom_headers,custom_cookies,timeout,proxy,proxies,params,data,json_data,trace_id = RequestContext.resolve(**request_kwargs)
-        timeout = self.config.timeout.resolve(timeout)
+        kws = dict(kwargs)
+        known, _passthrough = split_kwargs(kws)
 
-        allow_redirects = bool(request_kwargs.pop("allow_redirects", self.config.request.allow_redirects))
-        stream = bool(request_kwargs.pop("stream", self.config.request.stream))
-        verify_ssl = bool(request_kwargs.pop("verify_ssl", self.config.request.verify_ssl))
-        final_url = self._resolve_url(url)
-        resolved_proxies, proxy_url = self.config.proxy.resolve(final_url, proxy, proxies)
+        timeout = self.config.timeout.resolve(known.get("timeout"))
+        proxy = known.get("proxy")
+        proxies = known.get("proxies")
+        resolved_proxies, proxy_url = self.config.proxy.resolve(url, proxy, proxies)
 
-
-        headers = self.headers
-        headers.update(dict(custom_headers))
-        cookies = self.cookies
-        cookies.update(dict(custom_cookies))
-
-
-
-        extra = dict(request_kwargs)
+        extra = dict(kws)
         if native_session is not None:
             extra["native_session"] = native_session
 
         return RequestContext(
-            trace_id=trace_id,
             method=method.upper(),
-            url=final_url,
-            headers=headers,
-            cookies=cookies,
+            url=url,
+            headers=self._merge_into("headers", known),
+            cookies=self._merge_into("cookies", known),
             timeout=timeout,
-            allow_redirects=allow_redirects,
-            stream=stream,
-            verify_ssl=verify_ssl,
+            allow_redirects=bool(known.get("allow_redirects", self.config.allow_redirects)),
+            stream=bool(known.get("stream", self.config.stream)),
+            verify_ssl=bool(known.get("verify_ssl", self.config.verify_ssl)),
             proxy_url=proxy_url,
             proxies=resolved_proxies,
-            params=params,
-            data=data,
-            json_data=json_data,
+            params=known.get("params"),
+            data=known.get("data"),
+            json_data=known.get("json_data"),
             extra=extra,
             attempt=attempt,
         )
 
+    # ═══════════════════════════════════════════════════
+    # 响应构建
+    # ═══════════════════════════════════════════════════
+
     @staticmethod
     def _build_response(
-            context: RequestContext,
-            adapter_response: AdapterResponse,
-            elapsed: float,
-            retries: int,
+        result: AdapterResult,
+        context: RequestContext,
+        elapsed: float,
+        retries: int,
     ) -> LjpResponse:
         return LjpResponse(
-            status=adapter_response.status_code,
-            headers=dict(adapter_response.headers),
-            encoding=adapter_response.encoding,
-            content=adapter_response.content,
+            status_code=result.status_code,
+            headers=result.headers,
+            encoding=result.encoding,
+            content=result.content,
             elapsed=elapsed,
             retries=retries,
             request=context,
         )
 
+    # ═══════════════════════════════════════════════════
+    # 重试
+    # ═══════════════════════════════════════════════════
 
-class AsyncRequestModuleBase(RequestModuleBase,ABC):
+    def _should_retry(self, original: Exception, mapped: Exception) -> bool:
+        rc = self.config.retry
+        return rc.is_matching_exception(original) or rc.is_matching_exception(mapped)
 
+    def _retry_delay(self, attempt: int) -> float:
+        return self.config.retry.get_delay(attempt)
 
-    @staticmethod
-    def _extract_cookies(session: aiohttp.ClientSession) -> dict[str, str]:
-        return {
-            cookie.key: cookie.value
-            for cookie in session.cookie_jar.__iter__()
-        }
+    def _call_retry_callback(self) -> None:
+        callback = self.config.retry.on_retry
+        if callback is None:
+            return
+        try:
+            sig = inspect.signature(callback)
+            callback(self) if sig.parameters else callback()
+        except Exception:
+            _logger.exception("重试回调执行失败")
 
-    @staticmethod
-    def _map_exception(exc: Exception, context: RequestContext) -> Exception:
-        if isinstance(exc, (TimeoutException, NetworkException)):
-            return exc
+    # ═══════════════════════════════════════════════════
+    # Cookie 持久化
+    # ═══════════════════════════════════════════════════
 
-        common_context = {
-            "method": context.method,
-            "url": context.url,
-            "attempt": context.attempt,
-        }
-
-        if isinstance(exc, asyncio.TimeoutError):
-            return TimeoutException(
-                "异步请求超时",
-                timeout=sum(context.timeout),
-                e=exc,
-                context=common_context,
-            )
-
-        if isinstance(exc, aiohttp.ClientProxyConnectionError):
-            return NetworkException(
-                "代理连接失败",
-                url=context.url,
-                e=exc,
-                context=common_context,
-            )
-
-        if isinstance(exc, aiohttp.ClientSSLError):
-            return NetworkException(
-                "SSL 连接失败",
-                url=context.url,
-                e=exc,
-                context=common_context,
-            )
-
-        status_code = getattr(exc, "status", None)
-        if isinstance(exc, aiohttp.ClientError):
-            return NetworkException(
-                "异步请求失败",
-                url=context.url,
-                status_code=status_code,
-                e=exc,
-                context=common_context,
-            )
-        return exc
-
-    @abstractmethod
-    async def request(self, method: str, url: str, **kwargs: Any) -> LjpResponse:
-        pass
-
-    async def get(self, url: str, **kwargs: Any) -> LjpResponse:
-        return await self.request("GET", url, **kwargs)
-
-    async def post(self, url: str, **kwargs: Any) -> LjpResponse:
-        return await self.request("POST", url, **kwargs)
-
-    async def put(self, url: str, **kwargs: Any) -> LjpResponse:
-        return await self.request("PUT", url, **kwargs)
-
-    async def delete(self, url: str, **kwargs: Any) -> LjpResponse:
-        return await self.request("DELETE", url, **kwargs)
+    def _persist_response_cookies(self, cookies: Mapping[str, str]) -> None:
+        if cookies:
+            self.update_cookies(cookies)
 
 
-class SyncRequestModuleBase(RequestModuleBase):
-    def _resolve_request_session(
-        self,
-        native_session: requests.Session | None,
-    ) -> requests.Session:
-        return native_session or self.ensure_session()
-
-    def ensure_session(self) -> requests.Session:
-        raise NotImplementedError()
-
-    @staticmethod
-    def _extract_cookies(session: requests.Session) -> dict[str, str]:
-        return session.cookies.get_dict()
-
-    def _map_exception(self, exc: Exception, context: RequestContext) -> Exception:
-        if isinstance(exc, (TimeoutException, NetworkException)):
-            return exc
-
-        common_context = {
-            "method": context.method,
-            "url": context.url,
-            "attempt": context.attempt,
-        }
-
-        if isinstance(exc, requests.Timeout):
-            return TimeoutException(
-                "同步请求超时",
-                timeout=sum(context.timeout),
-                e=exc,
-                context=common_context,
-            )
-
-        if isinstance(exc, requests.exceptions.ProxyError):
-            return NetworkException(
-                "代理连接失败",
-                url=context.url,
-                e=exc,
-                context=common_context,
-            )
-
-        if isinstance(exc, requests.exceptions.SSLError):
-            return NetworkException(
-                "SSL 连接失败",
-                url=context.url,
-                e=exc,
-                context=common_context,
-            )
-
-        status_code = getattr(getattr(exc, "response", None), "status_code", None)
-        if isinstance(exc, requests.RequestException):
-            return NetworkException(
-                "同步请求失败",
-                url=context.url,
-                status_code=status_code,
-                e=exc,
-                context=common_context,
-            )
-
-        return exc
-
-    def request(self, method: str, url: str, **kwargs: Any) -> LjpResponse:
-        raise NotImplementedError()
-
-    def get(self, url: str, **kwargs: Any) -> LjpResponse:
-        return self.request("GET", url, **kwargs)
-
-    def post(self, url: str, **kwargs: Any) -> LjpResponse:
-        return self.request("POST", url, **kwargs)
-
-    def put(self, url: str, **kwargs: Any) -> LjpResponse:
-        return self.request("PUT", url, **kwargs)
-
-    def delete(self, url: str, **kwargs: Any) -> LjpResponse:
-        return self.request("DELETE", url, **kwargs)
-
-
-__all__ = ["RequestModuleBase", "AsyncRequestModuleBase", "SyncRequestModuleBase"]
-
-
+__all__ = ["BaseSession"]

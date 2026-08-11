@@ -8,15 +8,17 @@ from .backends import Async,ThreadPool,BackendRouter
 from .registry import TaskRegistry
 from .task import Task, TaskSubmitConfig
 from ljp_page._module.tools.bind import coerce_bind_task,BindTask
+from ljp_page.logger import logger
+__all__ = ["LJPExc","BindTask"]
 
-class LJPExc(Ljp_BaseClass_Logger):
+class LJPExc:
     """统一调度入口，负责协调任务提交与后端路由。"""
     Mode_Type = Literal["auto", "sync", "async", "thread", "process"]
-    Semaphore_def = ['sem1', 'sem2']
+    _SEMAPHORE_DEFAULTS = ("sem1", "sem2")
 
     def __init__(
         self,
-        logger: Any = None,
+        log: Any = None,
         *,
         thread_pool: ThreadPool | None = None,
         asy: Async | None = None,
@@ -28,8 +30,7 @@ class LJPExc(Ljp_BaseClass_Logger):
         semaphore_limits: dict[str, int] | None = None,
         history_limit: int = 1000,
     ) -> None:
-        super().__init__()
-        self.logger = logger
+        self.log = log or logger
         self._registry = TaskRegistry(history_limit=history_limit)
         self._semaphores = self._build_named_semaphores(
             sem1_concurrent,
@@ -86,7 +87,7 @@ class LJPExc(Ljp_BaseClass_Logger):
         sem2_limit: int,
         semaphore_limits: dict[str, int] | None = None,
     ) -> dict[str, asyncio.Semaphore]:
-        limits = {cls.Semaphore_def[0]: sem1_limit, cls.Semaphore_def[1]: sem2_limit}
+        limits = {cls._SEMAPHORE_DEFAULTS[0]: sem1_limit, cls._SEMAPHORE_DEFAULTS[1]: sem2_limit}
         if semaphore_limits:
             limits.update(semaphore_limits)
         return {name: cls.create_semaphore(limit) for name, limit in limits.items()}
@@ -399,7 +400,7 @@ class LJPExc(Ljp_BaseClass_Logger):
             cancel_futures=cancel_futures,
             async_timeout=async_timeout,
         )
-        self.info('统一调度器关闭')
+        self.log.info('统一调度器关闭')
 
 
     def __enter__(self) -> "LJPExc":

@@ -2,14 +2,13 @@ from enum import Enum
 
 from typing_extensions import TypedDict
 
-from base import Command, EmptyParams, EmptyResponse, Response
-from fetch.types import (
+from ..base import Command, EmptyParams, EmptyResponse, Response
+from .types import (
     AuthChallengeResponse,
     HeaderEntry,
     RequestPattern,
 )
-from io.types import StreamHandle
-from network.types import ErrorReason
+from ..network.types import ErrorReason
 
 
 class FetchMethod(str, Enum):
@@ -106,7 +105,7 @@ class GetResponseBodyResult(TypedDict):
 class TakeResponseBodyAsStreamResult(TypedDict):
     """takeResponseBodyAsStream 命令的结果。"""
 
-    stream: StreamHandle
+    stream: str
 
 
 #响应类型

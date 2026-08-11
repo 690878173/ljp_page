@@ -8,6 +8,8 @@ from ljp_page._module.request.brower.pydoll.connection import ConnectionHandler
 from ljp_page._module.request.brower.pydoll.elements.mixins import FindElementsMixin
 from dom.types import ShadowRootType
 
+__all__ = ['ShadowRoot']
+
 if TYPE_CHECKING:
     from ljp_page._module.request.brower.pydoll.elements.web_element import WebElement
     from dom.methods import GetOuterHTMLResponse

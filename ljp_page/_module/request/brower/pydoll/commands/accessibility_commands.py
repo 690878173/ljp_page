@@ -13,6 +13,8 @@ from accessibility.methods import (
 )
 from base import Command
 
+__all__ = ['AccessibilityCommands']
+
 if TYPE_CHECKING:
     from accessibility.methods import (
         DisableCommand,

@@ -14,6 +14,8 @@ from ljp_page._module.data_analysis.visualization.matplotlib import Matplotlib
 from sklearn.cross_decomposition import CCA
 from sklearn.metrics.pairwise import cosine_similarity, euclidean_distances
 
+__all__ = ['ModalityData', 'Multimodal', 'DataConfig', 'DataGen']
+
 class ModalityData:
     """
     单模态数据容器类，用于存储和管理单一模态的数据

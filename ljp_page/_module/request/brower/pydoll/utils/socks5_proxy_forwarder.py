@@ -61,6 +61,8 @@ import struct
 from types import TracebackType
 from ljp_page.logger import logger
 
+__all__ = ['_suppress_closed', 'SOCKS5Forwarder', '_HandshakeError']
+
 SOCKS5_VERSION = 0x05
 AUTH_NO_AUTH = 0x00
 AUTH_USERNAME_PASSWORD = 0x02

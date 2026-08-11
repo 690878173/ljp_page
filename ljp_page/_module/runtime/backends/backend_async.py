@@ -7,8 +7,10 @@ from typing import Any, Awaitable, cast, TYPE_CHECKING
 from ljp_page._module.runtime.backends.ljp_async import Async
 from ljp_page._module.runtime.backends.base import BaseBackend
 if TYPE_CHECKING:
-    from ljp_page._module.runtime.task import BindTask, TaskSubmitConfig
+    from ljp_page._module.tools.bind import BindTask
+    from ljp_page._module.runtime.task import TaskSubmitConfig
 
+__all__ = ["AsyncBackend"]
 
 class AsyncBackend(BaseBackend):
     """异步后端。"""
@@ -33,9 +35,9 @@ class AsyncBackend(BaseBackend):
         return self._submit(bound_task, config)
 
     def _submit(self, bound_task: BindTask, config: TaskSubmitConfig) -> Future[Any]:
-        awaitable = bound_task.create_awaitable()
-        awaitable = self._wrap_with_semaphores(awaitable, config.semaphores)
-        wrapped: Awaitable[Any] = awaitable
+        original = bound_task.create_awaitable()
+        sem_wrapped = self._wrap_with_semaphores(original, config.semaphores)
+        wrapped: Awaitable[Any] = sem_wrapped
         if config.timeout is not None:
             wrapped = asyncio.wait_for(wrapped, timeout=config.timeout)
 
@@ -49,8 +51,11 @@ class AsyncBackend(BaseBackend):
                 ),
             )
         except Exception:
-            self._close_if_coroutine(wrapped)
-            self._close_if_coroutine(awaitable)
+            self._close_if_coroutine(original)
+            if sem_wrapped is not original:
+                self._close_if_coroutine(sem_wrapped)
+            if wrapped is not original and wrapped is not sem_wrapped:
+                self._close_if_coroutine(wrapped)
             raise
 
     @classmethod
@@ -68,13 +73,20 @@ class AsyncBackend(BaseBackend):
         awaitable: Awaitable[Any],
         semaphores: tuple[asyncio.Semaphore, ...],
     ) -> Any:
-        async def _enter(index: int) -> Any:
-            if index >= len(semaphores):
+        # 使用显式迭代替代递归，避免信号量数量大时栈溢出。
+        # acquired 列表保证 acquire 中途异常时只释放已获取的信号量。
+        async def _run() -> Any:
+            acquired: list[asyncio.Semaphore] = []
+            try:
+                for sem in semaphores:
+                    await sem.acquire()
+                    acquired.append(sem)
                 return await awaitable
-            async with semaphores[index]:
-                return await _enter(index + 1)
+            finally:
+                for sem in reversed(acquired):
+                    sem.release()
 
-        return await _enter(0)
+        return await _run()
 
     @staticmethod
     def _close_if_coroutine(obj: Any) -> None:

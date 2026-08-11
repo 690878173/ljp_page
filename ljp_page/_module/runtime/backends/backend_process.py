@@ -5,8 +5,10 @@ from typing import Any, TYPE_CHECKING
 
 from .base import BaseBackend
 if TYPE_CHECKING:
-    from ljp_page._module.runtime.task import BindTask, TaskSubmitConfig
+    from ljp_page._module.tools.bind import BindTask
+    from ljp_page._module.runtime.task import TaskSubmitConfig
 
+__all__ = ["ProcessBackend"]
 
 class ProcessBackend(BaseBackend):
     """进程后端：当前版本仅保留接口。"""

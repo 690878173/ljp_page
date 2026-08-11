@@ -10,6 +10,8 @@ import aiohttp
 from ljp_page._module.request.brower.pydoll.exceptions import InvalidBrowserPath, InvalidResponse, NetworkError
 
 
+__all__ = ['TextExtractor']
+
 class TextExtractor(HTMLParser):
     """用于文本提取的 HTML 解析器。
 

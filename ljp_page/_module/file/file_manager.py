@@ -14,6 +14,9 @@ from ljp_page._core.base import Ljp_BaseClass_Logger
 from ljp_page._core.exceptions import CloseFileException, OpenFileException
 from ljp_page._core.logger import logger
 
+
+# TODO 考虑删除此文件，目录模式考虑保留
+
 class _FileHandlerBase(Ljp_BaseClass_Logger):
     """异步文件句柄池基类。"""
 

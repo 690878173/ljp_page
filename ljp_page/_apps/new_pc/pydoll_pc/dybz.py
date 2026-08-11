@@ -5,7 +5,7 @@ from urllib.parse import urljoin
 
 from ljp_page._core._exceptions import LjpBaseException
 from ljp_page._module.request.html import Html
-from ljp_page._module.app.pc.base.model import P1Result
+from ljp_page._module.app.pc.base import P1Result
 from ljp_page._apps.new_pc.pydoll_pc.xs import Xs
 from ljp_page.logger import logger
 

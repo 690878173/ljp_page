@@ -6,7 +6,7 @@ from typing import Any,TYPE_CHECKING
 
 if TYPE_CHECKING:
     from pathlib import Path
-    _file_path = str| Path|None
+    _file_path = str|Path| None
 
 class LjpBaseException(Exception):  # noqa: N818
     """项目全局唯一自定义异常基类（增强版，支持子类继承）"""
@@ -69,6 +69,10 @@ class Yes(LjpBaseException):
 
 class ConfigError(LjpBaseException):
     message = '配置错误'
+
+class Ljp_ImportError(LjpBaseException):
+    """导入模块失败"""
+    message = "导入模块失败"
 
 
 class Notfound(LjpBaseException):

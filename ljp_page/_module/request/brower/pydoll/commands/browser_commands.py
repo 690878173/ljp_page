@@ -22,6 +22,9 @@ from browser.methods import (
     SetWindowBoundsParams,
 )
 from browser.types import (
+
+__all__ = ['BrowserCommands']
+
     Bounds,
     WindowState,
 )

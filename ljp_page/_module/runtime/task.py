@@ -5,6 +5,8 @@ from concurrent.futures import Future
 from dataclasses import dataclass, replace
 from typing import Any, Callable, Generic, TypeVar, TYPE_CHECKING
 
+__all__ = ['TaskSubmitConfig', 'TaskMeta', 'Task']
+
 _T = TypeVar("_T")
 
 if TYPE_CHECKING:
@@ -57,7 +59,7 @@ class Task(Generic[_T]):
         """初始化任务句柄。
 
         Args:
-            future: 底层的 Future 对象
+            future: 底层的 Future 对象 # 后端返回的
             task_id: 任务唯一 ID
             mode_requested: 用户请求的执行模式（thread/async）
             mode_resolved: 实际使用的执行模式
@@ -157,8 +159,6 @@ class Task(Generic[_T]):
         """避免在异步事件循环中阻塞等待未完成任务。"""
         if self._future.done():
             return
-        if self.mode_resolved != "async":
-            return
 
         try:
             asyncio.get_running_loop()
@@ -166,7 +166,7 @@ class Task(Generic[_T]):
             return
 
         raise RuntimeError(
-            f"当前处于异步事件循环中，不能调用阻塞式 {method_name}() 等待未完成异步任务，"
+            f"当前处于异步事件循环中，不能调用阻塞式 {method_name}() 等待未完成任务，"
             "请使用 await handle 或 await handle.wait_async()"
         )
 
@@ -201,7 +201,7 @@ class Task(Generic[_T]):
 
     def __repr__(self) -> str:
         return (
-            f"TaskHandle(task_id={self.task_id!r}, status={self.status!r}, "
+            f"Task(task_id={self.task_id!r}, status={self.status!r}, "
             f"mode={self.mode_resolved!r}, semaphores={self.semaphore_names!r}, "
             f"backend={self.backend_name!r})"
         )

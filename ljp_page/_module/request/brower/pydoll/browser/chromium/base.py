@@ -41,6 +41,8 @@ from fetch.events import FetchEvent
 from fetch.types import AuthChallengeResponseType
 from ljp_page._module.request.brower.pydoll.utils.user_agent_parser import UserAgentParser
 
+__all__ = ['Browser']
+
 if TYPE_CHECKING:
     from tempfile import TemporaryDirectory
 

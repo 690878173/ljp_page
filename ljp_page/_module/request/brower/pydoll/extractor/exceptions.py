@@ -5,6 +5,8 @@ from __future__ import annotations
 from ljp_page._module.request.brower.pydoll.exceptions import PydollException
 
 
+__all__ = ['ExtractionException', 'FieldExtractionFailed', 'InvalidExtractionModel']
+
 class ExtractionException(PydollException):
     """与数据提取相关的异常的基类。"""
 

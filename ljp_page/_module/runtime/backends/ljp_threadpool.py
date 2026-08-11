@@ -97,12 +97,10 @@ class ThreadPool(Ljp_BaseClass_Logger):
                 self._refresh_running_locked()
 
             if task_exception is not None and not was_cancelled:
-                # self.error(
-                #     f"线程池任务执行失败(task_id={task_id}): {task_exception}",
-                #     self.submit.__name__,
-                # )
-                # 当前取消底层记录失败，由调用方自行捕获
-                pass
+                self.warning(
+                    f"线程池任务执行失败(task_id={task_id}): {task_exception}",
+                    self.submit.__name__,
+                )
 
         future.add_done_callback(_on_done)
 
