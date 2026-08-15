@@ -2,11 +2,9 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from typing import Any
-import random
 
-from .base import FP_DOM, CDPBaseSession
-from .dom import DomCommands,InputCommands,RuntimeCommands
+from ljp_page._module.request.brower.fp.base import FP_DOM, CDPBaseSession
+from ljp_page._module.request.brower.fp.dom import DomCommands,InputCommands,RuntimeCommands
 
 
 from ljp_page._core.utils.other import f_mark

@@ -190,6 +190,35 @@ class FP_DOM:  # noqa: N801
         return await session.send(**DomCommands.get_document(depth=-1, pierce=True))
 
     @classmethod
+    @f_mark('在指定的 DOM 节点（node_id）内部执行 querySelector')
+    async def cdp_query_selector(cls,cdp_session,node_id: int,selector: str,) -> dict[str, Any] | None:
+        """
+        在指定的 DOM 节点（node_id）内部执行 querySelector。
+        """
+        session = cls.as_cdp_session(cdp_session)
+
+        # 1. 发送 CDP 命令：在 node_id 范围内找 selector
+        result = await session.send(
+            **DomCommands.query_selector(
+                node_id=node_id,
+                selector=selector
+            )
+        )
+
+        found_node_id = result.get("nodeId")
+        if not found_node_id:
+            return None
+
+        # 2. 拿到这个节点的详细信息（包含 nodeId、localName、attributes 等）
+        node_info = await session.send(
+            **DomCommands.describe_node(
+                node_id=found_node_id,
+                depth=1  # depth=1 可以顺便把 contentDocument（iframe内容）带回来
+            )
+        )
+        return node_info.get("node")
+
+    @classmethod
     @f_mark("轮询查找 shadow root")
     async def cdp_find_shadow_root(cls,cdp_session,timeout: float = 0,poll_interval: float = 0.3,) -> dict[str, Any] | None:
         """轮询查找 shadow root。"""
@@ -354,18 +383,67 @@ class FP_Find:  # noqa: N801
             raise TimeoutError("在目标 iframe 内找不到复选框")
         return session, checkbox
 
-    async def _cf(self, timeout: float = 10):
+    async def _cf(self, timeout: float = 10) -> bool:
         timeout = float(timeout)
         session = None
         try:
-            await self.cdp_find_shadow_root(timeout=timeout)
-            session, checkbox = await self.cdp_find_checkbox(timeout=timeout)
-            print(f"找到的目标 Checkbox: {checkbox}")
-            await self._DOM.cdp_click_node(cdp_session=session, node_id=checkbox["nodeId"])
-            self._host.info("目标 iframe 内点击已执行")
+            # 1. 获取主页面会话（保持不变）
+            session = await self._get_cdp_session()
+
+            # 2. 【保留】轮询找到主页面的 Shadow Root（不要丢弃 sdr）
+            sdr = await self._DOM.cdp_find_shadow_root(session, timeout=timeout)
+            if sdr is None:
+                raise TimeoutError("未找到主页面的 Shadow Root")
+            self._host.info(f"找到主 Shadow Root, nodeId={sdr.get('nodeId')}")
+
+            # 3. 【新增】在 sdr 内部找 iframe（不再全局搜索）
+            iframe_node = await self._DOM.cdp_query_selector(
+                session,
+                node_id=sdr["nodeId"],
+                selector="iframe[src*='challenges.cloudflare.com']"  # 精确匹配 Cloudflare iframe
+            )
+            if iframe_node is None:
+                # 降级：只找 iframe
+                iframe_node = await self._DOM.cdp_query_selector(
+                    session, node_id=sdr["nodeId"], selector="iframe"
+                )
+            if iframe_node is None:
+                raise TimeoutError("在 Shadow Root 中未找到 iframe")
+
+            # 4. 【提取】进入 iframe 的文档
+            iframe_doc = iframe_node.get("contentDocument")
+            if iframe_doc is None:
+                # 这里先简单抛错，第四步我们会处理跨域(OOPIF)情况
+                raise TimeoutError("无法获取 iframe 文档（可能跨域，待处理）")
+
+            # 5. 【复用】在 iframe 文档内部找 Shadow Root（直接用你的 find_shadow_roots）
+            inner_shadow = self._DOM.find_shadow_roots(
+                iframe_doc,
+                deep=True,  # 允许穿透嵌套
+                only_one=True  # 只取第一个
+            )
+            if inner_shadow is None:
+                raise TimeoutError("在 iframe 内未找到内部 Shadow Root")
+            self._host.info(f"找到内部 Shadow Root, nodeId={inner_shadow.get('nodeId')}")
+
+            # 6. 【新增】在内部 Shadow Root 中找复选框
+            checkbox = await self._DOM.cdp_query_selector(
+                session,
+                node_id=inner_shadow["nodeId"],
+                selector="span.cb-i"  # Cloudflare 的复选框特征类名
+            )
+            if checkbox is None:
+                raise TimeoutError("在内部 Shadow Root 中未找到复选框")
+
+            # 7. 【保留】点击复选框（你原来的点击方法完全够用）
+            await self._DOM.cdp_click_node(session, checkbox["nodeId"])
+            self._host.info("复选框点击已执行")
+
+            # 8. 【保留】等待验证结果
             return await self.wait_result(timeout=max(timeout * 4, 20))
+
         except Exception as e:
-            self._host.error(f"iframe CDP 处理验证失败: {e}")
+            self._host.error(f"CDP 穿透验证失败: {e}")
             return False
         finally:
             if session is not None:

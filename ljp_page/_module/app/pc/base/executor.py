@@ -6,7 +6,6 @@ import asyncio
 from abc import ABC, abstractmethod
 from typing import Any
 
-from ljp_page._core.base import Ljp_BaseClass_Logger
 from ljp_page._core.utils.other import f_mark
 from ljp_page._module.runtime import LJPExc
 from ljp_page.logger import logger
@@ -21,7 +20,7 @@ from .request import BaseRequest, RequestManager
 from .scheduler import PipelineScheduler
 
 
-class BasePc(Ljp_BaseClass_Logger, ABC):
+class BasePc(ABC):
     """流水线爬虫基类。
 
     子类需要实现:
@@ -36,62 +35,41 @@ class BasePc(Ljp_BaseClass_Logger, ABC):
         html_parse_error(html)            — 解析错误回调
     """
 
-    # ---- 类级常量（子类可覆盖） ----
-    Config = Config
-    PipelineMode = PipelineMode
-
-    P1Result = P1Result
-    P2Result = P2Result
-    P1Item = P1Item
-    P2Item = P2Item
-    P3Item = P3Item
-
-    _FileManager = FileManager
-    _Parser = HtmlParser
-    _Request = RequestManager
-    _Scheduler = PipelineScheduler
-
     # ---- 构造与依赖注入 ----
 
     def __init__(self, config: Config, ui: Any = None) -> None:
-        super().__init__()
         self.config = config
         self.ui = ui
-        self.logger = logger
 
         # 生命周期控制
         self.controller = LifecycleController()
 
         # 运行时
-        self.exc = LJPExc(self.logger)
+        self.exc = LJPExc(logger)
         self.exc.set_semaphore("sem2", config.chapter_concurrency)
 
         # 组件
-        self.file_manager = self._FileManager(config)
-        self.parser_manager = self._Parser(self.exc)
+        self.file_manager = FileManager(config)
+        self.parser_manager = HtmlParser(self.exc)
 
         # 请求管理器（回调绑定反爬）
-        self.req = self._Request(
+        self.req = RequestManager(
             config=config,
             on_verify_check=self.check_meet_fp,
             on_verify_handle=self.fp_do,
-            logger=self.logger,
         )
 
         # 调度器（回调绑定业务逻辑）
-        self.scheduler = self._Scheduler(
+        self.scheduler = PipelineScheduler(
             config=config,
             controller=self.controller,
             exc=self.exc,
             on_fetch_p1=self.get_p1_result,
             on_process_p2=self.get_p2_result,
-            logger=self.logger,
         )
 
         # 快捷访问
         self.directory = self.file_manager.directory
-        self.file_handler = self.file_manager.file_handler
-        self.resource_manager = self.file_manager
 
         # 模式分发
         self._mode_handlers = {
@@ -102,6 +80,8 @@ class BasePc(Ljp_BaseClass_Logger, ABC):
 
         self.manager: Any = None
         self.build_other()
+
+    # ---- 业务钩子 ----
 
     def build_other(self) -> None:
         self.manager = self.get_manager()
@@ -148,9 +128,9 @@ class BasePc(Ljp_BaseClass_Logger, ABC):
             return res
         try:
             res.result()
-            self.info("所有任务完成")
+            logger.info("所有任务完成")
         except KeyboardInterrupt:
-            self.warning("用户中断")
+            logger.warning("用户中断")
             return None
         finally:
             self._stop()
@@ -161,7 +141,7 @@ class BasePc(Ljp_BaseClass_Logger, ABC):
         await self.before_run()
         handler = self._mode_handlers.get(self.config.mode)
         if handler is None:
-            self.error(f"未知模式: {self.config.mode}")
+            logger.error(f"未知模式: {self.config.mode}")
             return
         await handler()
         await self.after_run()
@@ -181,11 +161,11 @@ class BasePc(Ljp_BaseClass_Logger, ABC):
 
     def pause(self) -> None:
         self.controller.pause()
-        self.info("任务暂停")
+        logger.info("任务暂停")
 
     def resume(self) -> None:
         self.controller.resume()
-        self.info("任务继续")
+        logger.info("任务继续")
 
     def close(self) -> None:
         self._stop()
@@ -193,7 +173,7 @@ class BasePc(Ljp_BaseClass_Logger, ABC):
     def _stop(self) -> None:
         if self.controller.mark_stopped() == "already":
             return
-        self.debug("正在停止...")
+        logger.debug("正在停止...")
         timeout = self.config.session_close_timeout
         for component, name in [
             (self.req, "session"),
@@ -202,11 +182,11 @@ class BasePc(Ljp_BaseClass_Logger, ABC):
             try:
                 self.exc.submit(component.close(), mode="async", timeout=timeout).result(timeout=timeout)
             except Exception as exc:
-                self.error(f"{name} 关闭失败: {exc}")
+                logger.error(f"{name} 关闭失败: {exc}")
         try:
             self.exc.shutdown()
         except Exception as exc:
-            self.error(f"runtime 关闭失败: {exc}")
+            logger.error(f"runtime 关闭失败: {exc}")
 
     # ---- 抽象方法（业务层实现） ----
 

@@ -9,10 +9,3 @@ if TYPE_CHECKING:
     from .manager import *
 
 __getattr__, __all__ = bind_lazy_exports(__name__, __file__)
-
-
-
-import sys
-
-print(sys.path)
-

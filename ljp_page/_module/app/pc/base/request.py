@@ -6,9 +6,9 @@ import asyncio
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Awaitable
 
-from ljp_page._core.base import Ljp_BaseClass_Logger
 from ljp_page._module.request.session.pool import SessionPool as Session
 from ljp_page._module.request.verification import SessionVerificationContext
+from ljp_page.logger import logger
 
 from .config import Config
 
@@ -24,7 +24,7 @@ class BaseRequest(ABC):
     async def close(self) -> None: ...
 
 
-class RequestManager(Ljp_BaseClass_Logger, BaseRequest):
+class RequestManager(BaseRequest):
     """默认请求管理器 —— SessionPool + 回调式反爬。
 
     反爬检测 / 处理通过回调委托给 BasePc 的 check_meet_fp / fp_do。
@@ -35,10 +35,7 @@ class RequestManager(Ljp_BaseClass_Logger, BaseRequest):
         config: Config,
         on_verify_check: Callable[[str], Awaitable[bool]],
         on_verify_handle: Callable[..., Awaitable[None]],
-        logger: Any = None,
     ) -> None:
-        super().__init__()
-        self.set_logger(logger)
         self.config = config
         self._on_verify_check = on_verify_check
         self._on_verify_handle = on_verify_handle
@@ -55,7 +52,7 @@ class RequestManager(Ljp_BaseClass_Logger, BaseRequest):
             self.session.verification.set_verification(
                 self._verify_check, self._verify_handle,
             )
-            self.info("session 初始化完成")
+            logger.info("session 初始化完成")
 
     async def _verify_check(self, response: Any) -> bool:
         return await self._on_verify_check(response.text)
@@ -66,7 +63,7 @@ class RequestManager(Ljp_BaseClass_Logger, BaseRequest):
     async def get(
         self, url: str, session: Any = None, check_fp: bool = True, **kwargs: Any,
     ) -> Any:
-        self.debug(f"GET {url}")
+        logger.debug(f"GET {url}")
         return await self.session.get(url, session=session, verify_response=check_fp, **kwargs)
 
     async def close(self) -> None:

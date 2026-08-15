@@ -1,9 +1,11 @@
 
+
 from __future__ import annotations
 
 from typing import Any
 
 from ljp_page._core._exceptions import HtmlParseError, MeetCheckError, No, Notfound
+from ljp_page.logger import logger
 
 from ljp_page._module.app.pc.base import P2Item, P3Item, P1Result, P2Result
 
@@ -16,7 +18,7 @@ class Xs(_Xs):
     def __init__(self, config, ui=None):
         super().__init__(config, ui)
         self._xs_tab_pool: XsTabPool | None = None
-        self.req = PcRequest(self, self.config, self.logger)
+        self.req = PcRequest(self, self.config, logger)
 
     def _get_xs_tab_count(self) -> int:
         configured = getattr(self.config, "xs_tab_count", None)
@@ -156,7 +158,7 @@ class Xs(_Xs):
                 response = await self._xs_get(current_url)
                 html_str = response.text
                 if not html_str:
-                    self.warning(f"p3 响应为空: id={p3_id}, url={current_url}")
+                    logger.warning(f"p3 响应为空: id={p3_id}, url={current_url}")
                     break
 
                 parsed = await self.parser_manager.parse_html(self.parse_p3, html_str, current_url)
@@ -174,10 +176,10 @@ class Xs(_Xs):
                 continue
             except HtmlParseError as e:
                 self.html_parse_error(html_str)
-                self.error(e)
+                logger.error(e)
                 raise Notfound(e=e)
             except Exception as exc:
-                self.error(f"获取 p3 出错: id={p3_id}, url={current_url}, error={exc}")
+                logger.error(f"获取 p3 出错: id={p3_id}, url={current_url}, error={exc}")
                 break
 
         await manager.add_p3(

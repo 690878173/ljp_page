@@ -5,14 +5,14 @@ from __future__ import annotations
 import asyncio
 from typing import Any, Callable, Awaitable
 
-from ljp_page._core.base import Ljp_BaseClass_Logger
 from ljp_page._module.runtime import LJPExc
+from ljp_page.logger import logger
 
 from .config import Config
 from .controller import LifecycleController
 
 
-class PipelineScheduler(Ljp_BaseClass_Logger):
+class PipelineScheduler:
     """管理 P1→P2 流水线的队列与工作循环。
 
     通过回调与 BasePc 解耦：
@@ -29,10 +29,7 @@ class PipelineScheduler(Ljp_BaseClass_Logger):
         exc: LJPExc,
         on_fetch_p1: Callable[[str], Awaitable[Any]],
         on_process_p2: Callable[[Any], Awaitable[Any]],
-        logger: Any = None,
     ) -> None:
-        super().__init__()
-        self.set_logger(logger)
         self.config = config
         self.controller = controller
         self.exc = exc
@@ -78,11 +75,11 @@ class PipelineScheduler(Ljp_BaseClass_Logger):
                 result = await self._on_fetch_p1(p1_id)
                 for item in result.items:
                     await self.p2_queue.put(item)
-                self.info(f"P1 [{p1_id}] 产出 {len(result.items)} 个任务")
+                logger.info(f"P1 [{p1_id}] 产出 {len(result.items)} 个任务")
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
-                self.error(f"P1 worker 失败 [{p1_id}]: {exc}")
+                logger.error(f"P1 worker 失败 [{p1_id}]: {exc}")
             finally:
                 self.p1_queue.task_done()
 
@@ -102,7 +99,7 @@ class PipelineScheduler(Ljp_BaseClass_Logger):
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
-                self.error(f"P2 worker 失败: {exc}")
+                logger.error(f"P2 worker 失败: {exc}")
             finally:
                 self.p2_queue.task_done()
 

@@ -1,10 +1,11 @@
 import asyncio
+import datetime
 import threading
 import queue
 import time
 import atexit
 from pathlib import Path
-from typing import Optional, Tuple, TYPE_CHECKING
+from typing import Any, Optional, Tuple, TYPE_CHECKING
 from ljp_page.logger import logger
 
 from ljp_page._module.file.model import SyncFile, AioFile
@@ -287,4 +288,126 @@ class AsyncFileWriter:
         logger.debug("AsyncFileWriter worker协程结束")
 
 
-__all__ = ['SyncFileWriter', 'AsyncFileWriter']
+class Directory:
+    """目录管理器，负责根据模式生成文件保存路径。
+
+    支持两种目录分片模式:
+        mode1: 根目录下按 1、2、3... 创建子目录，每个子目录最多 N 个文件。
+        mode2: 按日期创建子目录 (YYYY-MM-DD)。
+    """
+
+    def __init__(
+        self,
+        directory_path: str | Path,
+        directory_num: int = 100,
+        mode: str = "mode1",
+    ):
+        self._directory_path = Path(directory_path).expanduser().resolve()
+        self._directory_num = max(1, int(directory_num))
+        self._mode = mode
+        self._current_dir: Path | None = None
+        self._file_counter = 0
+        self._lock = threading.Lock()
+        self._file_count_cache: dict[Path, int] = {}
+        self._mode_handlers = {
+            "mode1": self._get_mode1_directory,
+            "mode2": self._get_mode2_directory,
+        }
+        self._init_directory()
+
+    def _init_directory(self) -> None:
+        self._directory_path.mkdir(parents=True, exist_ok=True)
+        if self._mode not in self._mode_handlers:
+            raise ValueError(f"不支持的目录模式: {self._mode}")
+        self._current_dir = self._mode_handlers[self._mode]()
+
+    def _get_file_count(self, dir_path: Path) -> int:
+        if dir_path in self._file_count_cache:
+            return self._file_count_cache[dir_path]
+        if not dir_path.exists():
+            self._file_count_cache[dir_path] = 0
+            return 0
+        count = sum(1 for item in dir_path.iterdir() if item.is_file())
+        self._file_count_cache[dir_path] = count
+        return count
+
+    def _get_mode1_directory(self) -> Path:
+        """mode1：根目录下按 1、2、3... 创建子目录，每个最多 directory_num 个文件。"""
+        numeric_dirs = [
+            int(item.name)
+            for item in self._directory_path.iterdir()
+            if item.is_dir() and item.name.isdigit()
+        ]
+        current_number = max(numeric_dirs, default=1)
+        current_dir = self._directory_path / str(current_number)
+        current_dir.mkdir(parents=True, exist_ok=True)
+
+        if self._get_file_count(current_dir) >= self._directory_num:
+            current_dir = self._directory_path / str(current_number + 1)
+            current_dir.mkdir(parents=True, exist_ok=True)
+
+        self._file_counter = self._get_file_count(current_dir)
+        return current_dir
+
+    def _get_mode2_directory(self) -> Path:
+        """mode2：按日期创建子目录。"""
+        current_dir = self._directory_path / datetime.date.today().strftime("%Y-%m-%d")
+        current_dir.mkdir(parents=True, exist_ok=True)
+        self._file_counter = self._get_file_count(current_dir)
+        return current_dir
+
+    def _next_directory(self) -> Path:
+        if self._mode == "mode2":
+            return self._get_mode2_directory()
+        if self._current_dir is None:
+            return self._get_mode1_directory()
+        if self._file_counter >= self._directory_num:
+            next_number = int(self._current_dir.name) + 1
+            self._current_dir = self._directory_path / str(next_number)
+            self._current_dir.mkdir(parents=True, exist_ok=True)
+            self._file_counter = self._get_file_count(self._current_dir)
+        return self._current_dir
+
+    def _list_all_files(self, recursive: bool = True) -> list[Path]:
+        if recursive:
+            return [item for item in self._directory_path.rglob("*") if item.is_file()]
+        return [item for item in self._directory_path.iterdir() if item.is_file()]
+
+    # ---- 对外方法 ----
+
+    def get_file_path(self, file_name: str | Path) -> Path:
+        """根据分片策略获取文件写入路径。"""
+        with self._lock:
+            directory = self._next_directory()
+            file_path = directory / Path(file_name).name
+            if self._mode == "mode1" and not file_path.exists():
+                self._file_counter += 1
+                self._file_count_cache[directory] = self._file_counter
+            return file_path
+
+    def list_all_files(self, recursive: bool = True) -> list[Path]:
+        return self._list_all_files(recursive)
+
+    def find_file_path(self, file_name: str | Path, recursive: bool = True) -> Path | None:
+        """在目录中查找文件，返回最新修改时间的匹配文件路径。"""
+        target_name = Path(file_name).name
+        files = self._list_all_files(recursive)
+        matched_files = [item for item in files if item.name == target_name]
+        if not matched_files:
+            return None
+        return max(matched_files, key=lambda item: item.stat().st_mtime)
+
+    def get_current_dir(self) -> Path | None:
+        return self._current_dir
+
+    def get_stats(self) -> dict[str, Any]:
+        return {
+            "directory_path": self._directory_path,
+            "current_dir": self._current_dir,
+            "file_counter": self._file_counter,
+            "directory_num": self._directory_num,
+            "mode": self._mode,
+        }
+
+
+__all__ = ['SyncFileWriter', 'AsyncFileWriter', 'Directory']

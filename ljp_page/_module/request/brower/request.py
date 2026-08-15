@@ -13,7 +13,7 @@ from .exceptions import HTTP_Fetch_error
 from ljp_page._core.utils.other import f_mark
 
 if TYPE_CHECKING:
-    from .protocol.fetch.types import HeaderEntry
+    from ljp_page._module.request.brower.base.protocol.fetch import HeaderEntry
 
 from .constants import Scripts
 

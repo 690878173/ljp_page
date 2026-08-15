@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from typing import Any, Literal, TYPE_CHECKING
+
+from playwright.async_api import CDPSession
 
 from ljp_page._core.base import Ljp_BaseClass_Logger
 from playwright.async_api import Error, TimeoutError
@@ -32,11 +35,11 @@ class Ljp_Page(Ljp_BaseClass_Logger):  # noqa: N801
         self._cf_checker = CfResponseChecker()
         self.verify_gate = VerificationGate()
 
-        # ── 组合：CDP fetch 请求 ──
-        from .request import CdpRequest
-        self.cdp = CdpRequest(self)
+        # ── 组合 fetch 请求 ──
+        from .request import FetchRequest
+        self.fetch = FetchRequest(self)
 
-        self.cdp.set_verify_gate(self.verify_gate)
+        self.fetch.set_verify_gate(self.verify_gate)
 
     # ── 属性代理 ──
 
@@ -95,10 +98,28 @@ class Ljp_Page(Ljp_BaseClass_Logger):  # noqa: N801
 
     # ── 元素交互 ──
 
-    # 发送原生浏览器的fetch
+    # 浏览器执行js代码接口
     async def execute_command(self, expression: str, **kwargs: Any) -> Any:
         return await self.own_page.evaluate(expression, **kwargs)
 
+    async def _execute_command(self, command: dict) -> Any:
+        """
+        发送 CDP 命令。
+        参数 command 应为 {'method': str, 'params': dict} 格式，
+        其中 method 和 params 中的枚举值会被自动转换为字符串。
+        """
+        cdp = await self.get_cdp_session()
+
+        # 提取 method 和 params，并转换枚举为字符串
+        method = command.get("method")
+        params = command.get("params", {})
+
+        # 如果 method 是枚举，取 .value
+        if hasattr(method, "value"):
+            method = method.value
+
+        # 发送命令
+        return await cdp.send(method, params)
     async def click(self, selector: str, timeout: int = 30000) -> None:
         try:
             await self.own_page.click(selector, timeout=timeout)
@@ -117,7 +138,7 @@ class Ljp_Page(Ljp_BaseClass_Logger):  # noqa: N801
 
     # ── CDP ──
 
-    async def get_cdp_session(self, owm: Any = None) -> Any:
+    async def get_cdp_session(self, owm: Any = None) -> "CDPSession" :
         if owm:
             return await self.own_page.context.new_cdp_session(owm)
         if self._cdp_session:

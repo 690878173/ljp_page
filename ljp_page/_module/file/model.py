@@ -144,4 +144,120 @@ class AioFile(BaseFile):
         await self.close()
 
 
-__all__ = ['SyncFile', "AioFile"]
+class ManagedAsyncFile:
+    """自行管理生命周期的异步文件对象。
+
+    与 AioFile 不同，本类自行持有 aiofiles 句柄并管理打开/关闭/模式切换，
+    不依赖外部 FileHandler 池。
+    """
+
+    def __init__(
+        self,
+        file_path: str | Path,
+        mode: str = "a+",
+        encoding: str = "utf-8",
+    ) -> None:
+        self.path = Path(file_path).expanduser().resolve()
+        self.mode = mode
+        self.encoding = encoding
+        self._file_obj: Any = None
+
+    @property
+    def opened(self) -> bool:
+        return self._file_obj is not None and not getattr(self._file_obj, "closed", True)
+
+    @property
+    def closed(self) -> bool:
+        return not self.opened
+
+    async def open(
+        self,
+        mode: str | None = None,
+        encoding: str | None = None,
+    ) -> "ManagedAsyncFile":
+        target_mode = mode or self.mode
+        target_encoding = encoding or self.encoding
+
+        if self.opened and self.mode == target_mode and self.encoding == target_encoding:
+            return self
+
+        if self.opened:
+            await self.close()
+
+        try:
+            if any(flag in target_mode for flag in ["w", "a", "x", "+"]):
+                self.path.parent.mkdir(parents=True, exist_ok=True)
+
+            open_kwargs: dict[str, Any] = {"mode": target_mode}
+            if "b" not in target_mode:
+                open_kwargs["encoding"] = target_encoding
+
+            import aiofiles
+            self._file_obj = await aiofiles.open(self.path, **open_kwargs)
+            self.mode = target_mode
+            self.encoding = target_encoding
+            return self
+        except Exception as exc:
+            raise RuntimeError(f"打开文件失败: {self.path}") from exc
+
+    async def close(self) -> None:
+        if not self.opened:
+            self._file_obj = None
+            return
+        try:
+            if any(flag in self.mode for flag in ["w", "a", "+"]):
+                await self._file_obj.flush()
+            await self._file_obj.close()
+            self._file_obj = None
+        except Exception as exc:
+            raise RuntimeError(f"关闭文件失败: {self.path}") from exc
+
+    async def switch_mode(
+        self,
+        mode: str,
+        encoding: str | None = None,
+    ) -> "ManagedAsyncFile":
+        return await self.open(mode=mode, encoding=encoding)
+
+    async def switch_to_read(self) -> "ManagedAsyncFile":
+        await self.switch_mode("r")
+        await self.seek(0)
+        return self
+
+    async def switch_to_write(self, append: bool = True) -> "ManagedAsyncFile":
+        await self.switch_mode("a" if append else "w")
+        return self
+
+    async def read(self, size: int = -1) -> Any:
+        if not self.opened:
+            await self.open()
+        return await self._file_obj.read(size)
+
+    async def write(self, data: Any) -> Any:
+        if not self.opened:
+            await self.open()
+        return await self._file_obj.write(data)
+
+    async def flush(self) -> None:
+        if self.opened:
+            await self._file_obj.flush()
+
+    async def seek(self, offset: int, whence: int = 0) -> Any:
+        if not self.opened:
+            await self.open()
+        return await self._file_obj.seek(offset, whence)
+
+    async def tell(self) -> Any:
+        if not self.opened:
+            await self.open()
+        return await self._file_obj.tell()
+
+    async def __aenter__(self) -> "ManagedAsyncFile":
+        await self.open()
+        return self
+
+    async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+        await self.close()
+
+
+__all__ = ['SyncFile', "AioFile", "ManagedAsyncFile"]

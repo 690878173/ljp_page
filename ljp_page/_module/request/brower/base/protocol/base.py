@@ -1,6 +1,6 @@
 from typing import Generic, TypeVar
 
-#TODO：typeddict 来自typing_extensions
+# TODO：typeddict 来自typing_extensions
 from typing_extensions import NotRequired, TypedDict
 
 T_CommandParams = TypeVar('T_CommandParams')

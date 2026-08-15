@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Any, TYPE_CHECKING, Optional, Union
 
 from ljp_page._core.logger import logger
-from ..protocol.fetch.types import HeaderEntry
 from ..request import Request
 from ..exceptions import HTTP_Fetch_error
 
@@ -15,8 +14,8 @@ class FetchError(RuntimeError):
     """fetch 请求失败异常。"""
 
 
-class CdpRequest(Request):
-    """通过浏览器 CDP 的 fetch API 发出 HTTP 请求。
+class FetchRequest(Request):
+    """通过浏览器fetch API 发出 HTTP 请求。
 
     委托 page.execute_command 在浏览器 JS 上下文中执行，
     继承浏览器的 cookie、认证头等会话状态。
@@ -29,7 +28,7 @@ class CdpRequest(Request):
     def set_verify_gate(self, gate: Any) -> None:
         self.verify_gate = gate
 
-    async def request(self,method: str,url: str,params: Optional[dict[str, str]] = None,data: Optional[Union[dict, list, tuple, str, bytes]] = None,json: Optional[dict[str, Any]] = None,headers: Optional[list[HeaderEntry]] = None,**kwargs,):
+    async def request(self,method: str,url: str,params: Optional[dict[str, str]] = None,data: Optional[Union[dict, list, tuple, str, bytes]] = None,json: Optional[dict[str, Any]] = None,headers = None,**kwargs,):
         check_fp = bool(kwargs.pop("check_fp", True))
         verify_response = bool(kwargs.pop("verify_response", check_fp))
         verify_max_retries = kwargs.pop("verify_max_retries", None)
@@ -93,4 +92,4 @@ class CdpRequest(Request):
 
 
 
-__all__ = ["CdpRequest", "FetchError"]
+__all__ = ["FetchRequest", "FetchError"]

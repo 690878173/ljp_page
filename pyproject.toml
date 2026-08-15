@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 license = {text = "MIT"}
 authors = [
-    {name = "ljp", email = "ljp@example.com"}
+    {name = "ljp", email = "ljp@outlook.com"}
 ]
 keywords = ["web-scraping", "data-analysis", "visualization", "automation", "network"]
 classifiers = [
@@ -30,16 +30,13 @@ dependencies = [
     "pydantic>=2.13.3",
     "lxml>=4.9.0",              # XML/HTML 解析（io 和 request 都会用到）
     "curl-cffi>=0.16.0",        # 网络请求核心（带 TLS 指纹）
-
     # 数据库基础（轻量）
     "pymysql>=1.2.0",
     "dbutils>=3.1.2",
-
     # 可选但已默认安装（多数场景需要）
     "requests>=2.31.0",         # 同步请求（备胎）
 
-    # Jupyter 内核（数据分析用户友好）
-    "ipykernel>=7.2.0",
+
 ]
 
 # ============================================================
@@ -58,6 +55,7 @@ request = [
 # ----- 浏览器自动化（Playwright + 浏览器内核，约 500MB）-----
 automation = [
     "playwright>=1.40.0",
+    "pydoll-python>=2.23.1",
 ]
 
 # ----- JavaScript 执行 & 加密（常用于逆向）-----
@@ -84,6 +82,8 @@ ml = [
     "xgboost>=3.2.0",
     "lightgbm>=4.6.0",
     "catboost>=1.2.10",
+    # Jupyter 内核（数据分析用户友好）
+    "ipykernel>=7.2.0",
 ]
 
 # ----- 可视化（matplotlib 约 100MB，pyecharts 轻量）-----

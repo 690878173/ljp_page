@@ -970,7 +970,6 @@ source = { editable = "." }
 dependencies = [
     { name = "curl-cffi" },
     { name = "dbutils" },
-    { name = "ipykernel" },
     { name = "lxml" },
     { name = "pydantic" },
     { name = "pymysql" },
@@ -983,12 +982,14 @@ all = [
     { name = "aiohttp" },
     { name = "catboost" },
     { name = "ddddocr" },
+    { name = "ipykernel" },
     { name = "lightgbm" },
     { name = "matplotlib" },
     { name = "numpy" },
     { name = "pandas" },
     { name = "playwright" },
     { name = "pycryptodome" },
+    { name = "pydoll-python" },
     { name = "pyecharts" },
     { name = "pyexecjs" },
     { name = "pyqt6" },
@@ -1001,6 +1002,7 @@ all = [
 ]
 automation = [
     { name = "playwright" },
+    { name = "pydoll-python" },
 ]
 dev = [
     { name = "black" },
@@ -1015,6 +1017,7 @@ full = [
     { name = "matplotlib" },
     { name = "playwright" },
     { name = "pycryptodome" },
+    { name = "pydoll-python" },
     { name = "pyecharts" },
     { name = "pyexecjs" },
     { name = "seaborn" },
@@ -1028,6 +1031,7 @@ js-crypto = [
 ]
 ml = [
     { name = "catboost" },
+    { name = "ipykernel" },
     { name = "lightgbm" },
     { name = "numpy" },
     { name = "pandas" },
@@ -1066,7 +1070,7 @@ requires-dist = [
     { name = "curl-cffi", specifier = ">=0.16.0" },
     { name = "dbutils", specifier = ">=3.1.2" },
     { name = "ddddocr", marker = "extra == 'ocr'", specifier = ">=1.6.1" },
-    { name = "ipykernel", specifier = ">=7.2.0" },
+    { name = "ipykernel", marker = "extra == 'ml'", specifier = ">=7.2.0" },
     { name = "lightgbm", marker = "extra == 'ml'", specifier = ">=4.6.0" },
     { name = "ljp-page", extras = ["full", "ml", "ui"], marker = "extra == 'all'" },
     { name = "ljp-page", extras = ["request", "automation", "js-crypto", "ocr", "tls", "viz", "orm"], marker = "extra == 'full'" },
@@ -1077,6 +1081,7 @@ requires-dist = [
     { name = "playwright", marker = "extra == 'automation'", specifier = ">=1.40.0" },
     { name = "pycryptodome", marker = "extra == 'js-crypto'", specifier = ">=3.23.0" },
     { name = "pydantic", specifier = ">=2.13.3" },
+    { name = "pydoll-python", marker = "extra == 'automation'", specifier = ">=2.23.1" },
     { name = "pyecharts", marker = "extra == 'viz'", specifier = ">=2.0.0" },
     { name = "pyexecjs", marker = "extra == 'js-crypto'", specifier = ">=1.5.1" },
     { name = "pymysql", specifier = ">=1.2.0" },
@@ -2065,6 +2070,22 @@ wheels = [
     { url = "https://pypi.tuna.tsinghua.edu.cn/packages/5c/4f/86a832a9d14df58e663bfdf4627dc00d3317c2bd583c4fb23390b0f04b8e/pydantic_core-2.46.3-graalpy312-graalpy250_312_native-macosx_11_0_arm64.whl", hash = "sha256:f00a0961b125f1a47af7bcc17f00782e12f4cd056f83416006b30111d941dfa3", size = 1932428, upload-time = "2026-04-20T14:40:45.781Z" },
     { url = "https://pypi.tuna.tsinghua.edu.cn/packages/11/1a/fe857968954d93fb78e0d4b6df5c988c74c4aaa67181c60be7cfe327c0ca/pydantic_core-2.46.3-graalpy312-graalpy250_312_native-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:57697d7c056aca4bbb680200f96563e841a6386ac1129370a0102592f4dddff5", size = 1997550, upload-time = "2026-04-20T14:44:02.425Z" },
     { url = "https://pypi.tuna.tsinghua.edu.cn/packages/17/eb/9d89ad2d9b0ba8cd65393d434471621b98912abb10fbe1df08e480ba57b5/pydantic_core-2.46.3-graalpy312-graalpy250_312_native-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:fd35aa21299def8db7ef4fe5c4ff862941a9a158ca7b63d61e66fe67d30416b4", size = 2137657, upload-time = "2026-04-20T14:42:45.149Z" },
+]
+
+[[package]]
+name = "pydoll-python"
+version = "2.23.1"
+source = { registry = "https://pypi.tuna.tsinghua.edu.cn/simple/" }
+dependencies = [
+    { name = "aiofiles" },
+    { name = "aiohttp" },
+    { name = "pydantic" },
+    { name = "typing-extensions" },
+    { name = "websockets" },
+]
+sdist = { url = "https://pypi.tuna.tsinghua.edu.cn/packages/9f/49/36d9a00791fc2a42c83bb94d47e6aee443929d72d39e584dd290b695c3bc/pydoll_python-2.23.1.tar.gz", hash = "sha256:bdba325056c44c15d87e0882a8548cc59b284cb8acc2b89f316ef60ea84b1bed", size = 241542, upload-time = "2026-07-16T04:15:11.448Z" }
+wheels = [
+    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/8e/43/4f10fe73e9506c149baaf457d76ab564eb395aed87241ec46302351ad83d/pydoll_python-2.23.1-py3-none-any.whl", hash = "sha256:77ecce35394d65e3f6abcc19bcedac5d83fa5576085eff17a572845aeb74ccc3", size = 282511, upload-time = "2026-07-16T04:15:12.661Z" },
 ]
 
 [[package]]

@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, AsyncIterator
 
 from ljp_page._core._base_class import Ljp_BaseClass
 from ljp_page._module.request.fp import FP
+from ljp_page.logger import logger
 from ljp_page.request.edge.pydoll import Edge, EdgeConfig
 
 if TYPE_CHECKING:
@@ -183,7 +184,7 @@ class XsTabPool:
                 await self._queue.put(tab)
 
             self._started = True
-            self.pc.info(f"Xs Tab 池初始化完成: {self.size} 个 Tab")
+            logger.info(f"Xs Tab 池初始化完成: {self.size} 个 Tab")
 
     @asynccontextmanager
     async def lease(self) -> AsyncIterator[Any]:
