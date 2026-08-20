@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from ljp_page.logger import logger
+from ljp_page.logger import loguru_logger
 import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
@@ -121,7 +121,7 @@ class WebElement(FindElementsMixin):  #编号：PLR0904
         self._iframe_context: Optional[IFrameContext] = None
         self._iframe_resolver: Optional[IFrameContextResolver] = None
         self._def_attributes(attributes_list)
-        logger.debug(
+        loguru_logger.debug(
             f'WebElement initialized: object_id={self._object_id}, '
             f'method={self._search_method}, selector={self._selector}, '
             f'attributes={len(self._attributes)}'
@@ -182,12 +182,12 @@ class WebElement(FindElementsMixin):  #编号：PLR0904
                 'return (this.textContent || "").trim()', return_by_value=True
             )
             text_value = response.get('result', {}).get('result', {}).get('value', '') or ''
-            logger.debug(f'Extracted text length (iframe ctx): {len(text_value)}')
+            loguru_logger.debug(f'Extracted text length (iframe ctx): {len(text_value)}')
             return text_value
 
         outer_html = await self.inner_html
         text_value = extract_text_from_html(outer_html, strip=True)
-        logger.debug(f'Extracted text length: {len(text_value)}')
+        loguru_logger.debug(f'Extracted text length: {len(text_value)}')
         return text_value
 
     @property
@@ -198,7 +198,7 @@ class WebElement(FindElementsMixin):  #编号：PLR0904
         command = DomCommands.get_box_model(object_id=self._object_id)
         response: GetBoxModelResponse = await self._execute_command(command)
         content = response['result']['model']['content']
-        logger.debug(f'Bounds retrieved (points={len(content)})')
+        loguru_logger.debug(f'Bounds retrieved (points={len(content)})')
         return content
 
     @property
@@ -252,19 +252,19 @@ class WebElement(FindElementsMixin):  #编号：PLR0904
         返回相对于视口的坐标（替代bounds属性）。"""
         response = await self.execute_script(Scripts.BOUNDS, return_by_value=True)
         bounds = json.loads(response['result']['result']['value'])
-        logger.debug(f'Bounds via JS: {bounds}')
+        loguru_logger.debug(f'Bounds via JS: {bounds}')
         return bounds
 
     async def get_parent_element(self) -> WebElement:
         """元素的父元素。"""
-        logger.debug(f'Getting parent element for object_id={self._object_id}')
+        loguru_logger.debug(f'Getting parent element for object_id={self._object_id}')
         result = await self.execute_script(Scripts.GET_PARENT_NODE)
         if not self._has_object_id_key(result):
             raise ElementNotFound(f'Parent element not found for element: {self}')
 
         object_id = result['result']['result']['objectId']
         attributes = await self._get_object_attributes(object_id=object_id)
-        logger.debug(f'Parent element resolved: object_id={object_id}')
+        loguru_logger.debug(f'Parent element resolved: object_id={object_id}')
         return WebElement(
             object_id, self._connection_handler, attributes_list=attributes, mouse=self._mouse
         )
@@ -323,7 +323,7 @@ class WebElement(FindElementsMixin):  #编号：PLR0904
 
         mode = ShadowRootType(shadow_root_data.get('shadowRootType', 'open'))
 
-        logger.debug(f'Shadow root resolved: object_id={shadow_object_id}, mode={mode.value}')
+        loguru_logger.debug(f'Shadow root resolved: object_id={shadow_object_id}, mode={mode.value}')
         return ShadowRoot(
             object_id=shadow_object_id,
             connection_handler=self._connection_handler,
@@ -348,7 +348,7 @@ class WebElement(FindElementsMixin):  #编号：PLR0904
 
         加薪：
             ElementNotFound：如果没有找到该元素的子元素并且 raise_exc 为 True。"""
-        logger.debug(
+        loguru_logger.debug(
             f'Getting children: max_depth={max_depth}, '
             f'tag_filter={tag_filter}, raise_exc={raise_exc}'
         )
@@ -357,7 +357,7 @@ class WebElement(FindElementsMixin):  #编号：PLR0904
         )
         if not children and raise_exc:
             raise ElementNotFound(f'Child element not found for element: {self}')
-        logger.debug(f'Children found: {len(children)}')
+        loguru_logger.debug(f'Children found: {len(children)}')
         return children
 
     async def get_siblings_elements(
@@ -376,13 +376,13 @@ class WebElement(FindElementsMixin):  #编号：PLR0904
         加薪：
             ElementNotFound：如果没有找到该元素的同级元素
             并且 raise_exc 为 True。"""
-        logger.debug(f'Getting siblings: tag_filter={tag_filter}, raise_exc={raise_exc}')
+        loguru_logger.debug(f'Getting siblings: tag_filter={tag_filter}, raise_exc={raise_exc}')
         siblings = await self._get_family_elements(
             script=Scripts.GET_SIBLINGS_NODE, tag_filter=tag_filter
         )
         if not siblings and raise_exc:
             raise ElementNotFound(f'Sibling element not found for element: {self}')
-        logger.debug(f'Siblings found: {len(siblings)}')
+        loguru_logger.debug(f'Siblings found: {len(siblings)}')
         return siblings
 
     async def take_screenshot(
@@ -433,7 +433,7 @@ class WebElement(FindElementsMixin):  #编号：PLR0904
             height=bounds['height'],
             scale=1,
         )
-        logger.debug(
+        loguru_logger.debug(
             f'Taking element screenshot: path={path}, quality={quality}, as_base64={as_base64}, '
             f'clip={{x: {clip["x"]}, y: {clip["y"]}, w: {clip["width"]}, h: {clip["height"]}}}'
         )
@@ -445,21 +445,21 @@ class WebElement(FindElementsMixin):  #编号：PLR0904
         screenshot_data = screenshot['result']['data']
 
         if as_base64:
-            logger.info('Element screenshot captured and returned as base64')
+            loguru_logger.info('Element screenshot captured and returned as base64')
             return screenshot_data
 
         if path:
             image_bytes = decode_base64_to_bytes(screenshot_data)
             async with aiofiles.open(str(path), 'wb') as file:
                 await file.write(image_bytes)
-            logger.info(f'Element screenshot saved: {path}')
+            loguru_logger.info(f'Element screenshot saved: {path}')
 
         return None
 
     async def scroll_into_view(self):
         """将元素滚动到可见视口中。"""
         command = DomCommands.scroll_into_view_if_needed(object_id=self._object_id)
-        logger.info(f'Scrolling element into view: object_id={self._object_id}')
+        loguru_logger.info(f'Scrolling element into view: object_id={self._object_id}')
         await self._execute_command(command)
 
     async def wait_until(
@@ -489,7 +489,7 @@ class WebElement(FindElementsMixin):  #编号：PLR0904
             condition_parts.append('interactable')
         condition_msg = ' and '.join(condition_parts)
 
-        logger.info(
+        loguru_logger.info(
             f'Waiting for element: visible={is_visible}, '
             f'interactable={is_interactable}, timeout={timeout}s'
         )
@@ -498,11 +498,11 @@ class WebElement(FindElementsMixin):  #编号：PLR0904
         while True:
             results = await asyncio.gather(*(check() for check in checks))
             if all(results):
-                logger.info(f'Element condition satisfied: {condition_msg}')
+                loguru_logger.info(f'Element condition satisfied: {condition_msg}')
                 return
 
             if timeout and loop.time() - start_time > timeout:
-                logger.error(f'Timeout waiting for element to become {condition_msg}')
+                loguru_logger.error(f'Timeout waiting for element to become {condition_msg}')
                 raise WaitElementTimeout(f'Timed out waiting for element to become {condition_msg}')
 
             await asyncio.sleep(0.5)
@@ -525,7 +525,7 @@ class WebElement(FindElementsMixin):  #编号：PLR0904
         if not await self.is_visible():
             raise ElementNotVisible()
 
-        logger.info(f'Clicking element via JS: object_id={self._object_id}')
+        loguru_logger.info(f'Clicking element via JS: object_id={self._object_id}')
         result = await self.execute_script(Scripts.CLICK, return_by_value=True)
         clicked = result['result']['result']['value']
         if not clicked:
@@ -579,13 +579,13 @@ class WebElement(FindElementsMixin):  #编号：PLR0904
 
         has_iframe_context = getattr(self, '_iframe_context', None) is not None
         if humanize and self._mouse is not None and not has_iframe_context:
-            logger.info(
+            loguru_logger.info(
                 f'Clicking element (humanized): x={position_to_click[0]}, y={position_to_click[1]}'
             )
             await self._mouse.click(position_to_click[0], position_to_click[1])
             return
 
-        logger.info(
+        loguru_logger.info(
             f'Clicking element: x={position_to_click[0]}, '
             f'y={position_to_click[1]}, hold={hold_time}s'
         )
@@ -619,11 +619,11 @@ class WebElement(FindElementsMixin):  #编号：PLR0904
 
         加薪：
             ElementNotInteractable：如果元素不接受文本输入。"""
-        logger.info('Clearing element value')
+        loguru_logger.info('Clearing element value')
         result = await self.execute_script(Scripts.CLEAR_INPUT, return_by_value=True)
         success = result['result'].get('result', {}).get('value', False)
         if not success:
-            logger.error('Element does not accept text input')
+            loguru_logger.error('Element does not accept text input')
             raise ElementNotInteractable('Element does not accept text input')
         if self._attributes.get('tag_name', '').lower() in {'input', 'textarea'}:
             self._attributes['value'] = ''
@@ -643,15 +643,15 @@ class WebElement(FindElementsMixin):  #编号：PLR0904
         注意：
             使用 JavaScript 来最大程度地兼容所有输入类型。
             自动处理输入/文本区域和内容可编辑元素。"""
-        logger.info(f'Inserting text (length={len(text)})')
+        loguru_logger.info(f'Inserting text (length={len(text)})')
         result = await self.execute_script(
             Scripts.INSERT_TEXT, return_by_value=True, arguments=[CallArgument(value=text)]
         )
-        logger.debug(f'Insert text result: {result}')
+        loguru_logger.debug(f'Insert text result: {result}')
         success = result['result'].get('result', {}).get('value', False)
 
         if not success:
-            logger.error('Element does not accept text input')
+            loguru_logger.error('Element does not accept text input')
             raise ElementNotInteractable('Element does not accept text input')
         #在常见情况下保持缓存属性一致（例如输入值）
         #这可以避免为简单断言强制进行 DOM 往返。
@@ -674,7 +674,7 @@ class WebElement(FindElementsMixin):  #编号：PLR0904
         ):
             raise ElementNotAFileInput()
         files_list = [str(file) for file in files] if isinstance(files, list) else [str(files)]
-        logger.info(f'Setting input files: count={len(files_list)}')
+        loguru_logger.info(f'Setting input files: count={len(files_list)}')
         await self._execute_command(
             DomCommands.set_file_input_files(files=files_list, object_id=self._object_id)
         )
@@ -691,7 +691,7 @@ class WebElement(FindElementsMixin):  #编号：PLR0904
             text：要输入到元素中的文本。
             humanize：当为 True 时，模拟类似人类的打字。
             间隔：已弃用。使用 humanize=True 代替。"""
-        logger.info(f'Typing text (length={len(text)}, humanize={humanize})')
+        loguru_logger.info(f'Typing text (length={len(text)}, humanize={humanize})')
         await self.click(humanize=humanize)
         keyboard = self._get_keyboard()
         await keyboard.type_text(text, humanize=humanize, interval=interval)
@@ -711,7 +711,7 @@ class WebElement(FindElementsMixin):  #编号：PLR0904
             stacklevel=2,
         )
         key_name, code = key
-        logger.info(f'Key down: key={key_name} code={code} modifiers={modifiers}')
+        loguru_logger.info(f'Key down: key={key_name} code={code} modifiers={modifiers}')
         await self._execute_command(
             InputCommands.dispatch_key_event(
                 type=KeyEventType.KEY_DOWN,
@@ -734,7 +734,7 @@ class WebElement(FindElementsMixin):  #编号：PLR0904
             stacklevel=2,
         )
         key_name, code = key
-        logger.info(f'Key up: key={key_name} code={code}')
+        loguru_logger.info(f'Key up: key={key_name} code={code}')
         await self._execute_command(
             InputCommands.dispatch_key_event(
                 type=KeyEventType.KEY_UP,
@@ -773,7 +773,7 @@ class WebElement(FindElementsMixin):  #编号：PLR0904
             如果元素可编辑（输入、文本区域或内容可编辑），则为 True。"""
         result = await self.execute_script(Scripts.IS_EDITABLE, return_by_value=True)
         is_editable = result['result']['result']['value']
-        logger.debug(f'Element editable check: {is_editable}')
+        loguru_logger.debug(f'Element editable check: {is_editable}')
         return is_editable
 
     async def is_visible(self):
@@ -857,7 +857,7 @@ class WebElement(FindElementsMixin):  #编号：PLR0904
         if not is_script_already_function(script):
             script = f'function(){{ {script} }}'
 
-        logger.debug(
+        loguru_logger.debug(
             f'Executing script on element: return_by_value={return_by_value}, '
             f'length={len(script)}, args={len(arguments) if arguments else 0}'
         )
@@ -965,7 +965,7 @@ class WebElement(FindElementsMixin):  #编号：PLR0904
                 )
             )
 
-        logger.debug(f'Family elements found: {len(family_elements)}')
+        loguru_logger.debug(f'Family elements found: {len(family_elements)}')
         return family_elements
 
     def _def_attributes(self, attributes_list: list[str]):
@@ -975,7 +975,7 @@ class WebElement(FindElementsMixin):  #编号：PLR0904
             key = key if key != 'class' else 'class_name'
             value = attributes_list[i + 1]
             self._attributes[key] = value
-        logger.debug(f'Attributes defined: count={len(self._attributes)}')
+        loguru_logger.debug(f'Attributes defined: count={len(self._attributes)}')
 
     def _is_option_tag(self):
         """检查元素是否是 <option> 标记。"""

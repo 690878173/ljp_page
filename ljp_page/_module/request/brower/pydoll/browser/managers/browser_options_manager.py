@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ljp_page.logger import logger
+from ljp_page.logger import loguru_logger
 from typing import TYPE_CHECKING, Optional
 
 from ljp_page._module.request.brower.pydoll.browser.interfaces import BrowserOptionsManager
@@ -22,7 +22,7 @@ class ChromiumOptionsManager(BrowserOptionsManager):
 
     def __init__(self, options: Optional[Options] = None):
         self.options = options
-        logger.debug(
+        loguru_logger.debug(
             f'ChromiumOptionsManager initialized with options='
             f'{type(options).__name__ if options is not None else "None"}'
         )
@@ -42,16 +42,16 @@ class ChromiumOptionsManager(BrowserOptionsManager):
             InvalidOptionsObject：如果提供的选项不是 ChromiumOptions。"""
         if self.options is None:
             self.options = ChromiumOptions()
-            logger.debug('No options provided; created default ChromiumOptions')
+            loguru_logger.debug('No options provided; created default ChromiumOptions')
 
         if not isinstance(self.options, ChromiumOptions):
-            logger.error(f'Invalid options type: {type(self.options)}; expected ChromiumOptions')
+            loguru_logger.error(f'Invalid options type: {type(self.options)}; expected ChromiumOptions')
             raise InvalidOptionsObject(f'Expected ChromiumOptions, got {type(self.options)}')
 
         self.add_default_arguments()
-        logger.debug('Options initialized and default arguments applied')
+        loguru_logger.debug('Options initialized and default arguments applied')
         return self.options
 
     def add_default_arguments(self):
         """添加 CDP 集成所需的默认参数。"""
-        logger.debug('Adding default arguments for Chromium-based browsers')
+        loguru_logger.debug('Adding default arguments for Chromium-based browsers')

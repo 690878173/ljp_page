@@ -6,7 +6,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Callable
 
-from ljp_page.logger import logger
+from ljp_page.logger import loguru_logger
 
 
 __all__ = ['TempDirectoryManager']
@@ -25,7 +25,7 @@ class TempDirectoryManager:
                 必须返回 TemporaryDirectory 兼容对象。"""
         self._temp_dir_factory = temp_dir_factory
         self._temp_dirs: list[TemporaryDirectory] = []
-        logger.debug('TempDirectoryManager initialized')
+        loguru_logger.debug('TempDirectoryManager initialized')
 
     def create_temp_dir(self) -> TemporaryDirectory:
         """创建并跟踪新的临时目录以供浏览器使用。
@@ -34,7 +34,7 @@ class TempDirectoryManager:
             浏览器 --user-data-dir 参数的 TemporaryDirectory 对象。"""
         temp_dir = self._temp_dir_factory()
         self._temp_dirs.append(temp_dir)
-        logger.debug(f'Created temp directory: {temp_dir.name}')
+        loguru_logger.debug(f'Created temp directory: {temp_dir.name}')
         return temp_dir
 
     @staticmethod
@@ -56,7 +56,7 @@ class TempDirectoryManager:
                 break
             except PermissionError:
                 time.sleep(0.1)
-                logger.debug(
+                loguru_logger.debug(
                     f'Retrying file operation due to PermissionError (attempt {retry_time})'
                 )
         else:
@@ -108,7 +108,7 @@ class TempDirectoryManager:
                     self.retry_process_file(func, path)
                     return
                 except PermissionError:
-                    logger.warning(f'Ignoring locked Chrome file during cleanup: {path}')
+                    loguru_logger.warning(f'Ignoring locked Chrome file during cleanup: {path}')
                     return
         elif exc_type is OSError:
             return
@@ -120,7 +120,7 @@ class TempDirectoryManager:
         使用自定义错误处理程序来解决特定于浏览器的文件锁定问题。
         即使某些文件拒绝删除，也会继续清理。"""
         for temp_dir in self._temp_dirs:
-            logger.info(f'Cleaning up temp directory: {temp_dir.name}')
+            loguru_logger.info(f'Cleaning up temp directory: {temp_dir.name}')
             shutil.rmtree(temp_dir.name, onerror=self.handle_cleanup_error)
             remaining = Path(temp_dir.name)
             if not remaining.exists():
@@ -133,12 +133,12 @@ class TempDirectoryManager:
                 except Exception:  #noqa：BLE001 - 尽力清理
                     pass
                 if not remaining.exists():
-                    logger.debug(
+                    loguru_logger.debug(
                         f'Temp directory removed after retry #{attempt + 1}: {temp_dir.name}'
                     )
                     break
             if remaining.exists():
-                logger.warning(
+                loguru_logger.warning(
                     f'Temp directory still present after retries (leftover files may remain): '
                     f'{temp_dir.name}'
                 )

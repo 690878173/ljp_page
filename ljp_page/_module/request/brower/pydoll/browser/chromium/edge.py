@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ljp_page.logger import logger
+from ljp_page.logger import loguru_logger
 import platform
 from typing import TYPE_CHECKING, Optional
 
@@ -43,7 +43,7 @@ class Edge(Browser):
             UnsupportedOS：如果操作系统不受支持。
             ValueError：如果在默认位置找不到可执行文件。"""
         os_name = platform.system()
-        logger.debug(f'Resolving default Edge binary for OS: {os_name}')
+        loguru_logger.debug(f'Resolving default Edge binary for OS: {os_name}')
 
         browser_paths = {
             'Windows': [
@@ -67,9 +67,9 @@ class Edge(Browser):
         browser_path = browser_paths.get(os_name)
 
         if not browser_path:
-            logger.error(f'Unsupported OS: {os_name}')
+            loguru_logger.error(f'Unsupported OS: {os_name}')
             raise UnsupportedOS()
 
         path = validate_browser_paths(browser_path)
-        logger.debug(f'Using Edge binary: {path}')
+        loguru_logger.debug(f'Using Edge binary: {path}')
         return path

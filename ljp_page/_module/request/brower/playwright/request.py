@@ -2,7 +2,7 @@
 from __future__ import annotations
 from typing import Any, TYPE_CHECKING, Optional, Union
 
-from ljp_page._core.logger import logger
+from ljp_page._core.logger import loguru_logger
 from ..request import Request
 from ..exceptions import HTTP_Fetch_error
 
@@ -71,7 +71,7 @@ class FetchRequest(Request):
             return self._check_response(result)
 
         except Exception as exc:
-            logger.error(f'Request failed: {exc}')
+            loguru_logger.error(f'Request failed: {exc}')
             raise HTTP_Fetch_error(f'Request failed: {str(exc)}') from exc
 
 

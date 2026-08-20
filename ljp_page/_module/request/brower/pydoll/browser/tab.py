@@ -123,7 +123,7 @@ if TYPE_CHECKING:
     from storage.methods import GetCookiesResponse as StorageGetCookiesResponse
     from target.methods import AttachToTargetResponse, GetTargetsResponse
 
-from ljp_page.logger import logger
+from ljp_page.logger import loguru_logger
 
 IFrame: TypeAlias = 'Tab'
 
@@ -178,7 +178,7 @@ class Tab(FindElementsMixin):
         self._keyboard: Optional[KeyboardAPI] = None
         self._mouse: MouseAPI = MouseAPI(self)
         self._extraction_engine: Optional[ExtractionEngine] = None
-        logger.debug(
+        loguru_logger.debug(
             (
                 f'Tab initialized: target_id={self._target_id}, '
                 f'ws_address_set={bool(self._ws_address)}, '
@@ -332,18 +332,18 @@ class Tab(FindElementsMixin):
 
     async def enable_page_events(self):
         """启用 CDP 页面域事件（加载、导航、对话框等）。"""
-        logger.debug('Enabling Page events')
+        loguru_logger.debug('Enabling Page events')
         response = await self._execute_command(PageCommands.enable())
         self._page_events_enabled = True
-        logger.debug('Page events enabled')
+        loguru_logger.debug('Page events enabled')
         return response
 
     async def enable_network_events(self):
         """启用 CDP 网络域事件（请求、响应等）。"""
-        logger.debug('Enabling Network events')
+        loguru_logger.debug('Enabling Network events')
         response = await self._execute_command(NetworkCommands.enable())
         self._network_events_enabled = True
-        logger.debug('Network events enabled')
+        loguru_logger.debug('Network events enabled')
         return response
 
     async def enable_fetch_events(
@@ -361,7 +361,7 @@ class Tab(FindElementsMixin):
 
         注意：
             拦截的请求必须明确继续或超时。"""
-        logger.debug(
+        loguru_logger.debug(
             f'Enabling Fetch events: handle_auth={handle_auth}, resource_type={resource_type}, '
             f'stage={request_stage}'
         )
@@ -373,23 +373,23 @@ class Tab(FindElementsMixin):
             )
         )
         self._fetch_events_enabled = True
-        logger.debug('Fetch events enabled')
+        loguru_logger.debug('Fetch events enabled')
         return response
 
     async def enable_dom_events(self):
         """启用 CDP DOM 域事件（文档结构更改）。"""
-        logger.debug('Enabling DOM events')
+        loguru_logger.debug('Enabling DOM events')
         response = await self._execute_command(DomCommands.enable())
         self._dom_events_enabled = True
-        logger.debug('DOM events enabled')
+        loguru_logger.debug('DOM events enabled')
         return response
 
     async def enable_runtime_events(self):
         """启用 CDP 运行时域事件。"""
-        logger.debug('Enabling Runtime events')
+        loguru_logger.debug('Enabling Runtime events')
         response = await self._execute_command(RuntimeCommands.enable())
         self._runtime_events_enabled = True
-        logger.debug('Runtime events enabled')
+        loguru_logger.debug('Runtime events enabled')
         return response
 
     async def enable_intercept_file_chooser_dialog(self):
@@ -397,10 +397,10 @@ class Tab(FindElementsMixin):
 
         注意：
             为了方便起见，使用expect_file_chooser上下文管理器。"""
-        logger.info('Enabling file chooser interception')
+        loguru_logger.info('Enabling file chooser interception')
         response = await self._execute_command(PageCommands.set_intercept_file_chooser_dialog(True))
         self._intercept_file_chooser_dialog_enabled = True
-        logger.debug('File chooser interception enabled')
+        loguru_logger.debug('File chooser interception enabled')
         return response
 
     async def enable_auto_solve_cloudflare_captcha(
@@ -433,7 +433,7 @@ class Tab(FindElementsMixin):
                 stacklevel=2,
             )
 
-        logger.info('Enabling Cloudflare captcha auto-solve')
+        loguru_logger.info('Enabling Cloudflare captcha auto-solve')
         if not self.page_events_enabled:
             await self.enable_page_events()
 
@@ -443,63 +443,63 @@ class Tab(FindElementsMixin):
         )
 
         self._cloudflare_captcha_callback_id = await self.on(PageEvent.LOAD_EVENT_FIRED, callback)
-        logger.debug(
+        loguru_logger.debug(
             f'Cloudflare auto-solve callback registered: id={self._cloudflare_captcha_callback_id}'
         )
 
     async def disable_fetch_events(self):
         """禁用 CDP 获取域并释放暂停的请求。"""
-        logger.debug('Disabling Fetch events')
+        loguru_logger.debug('Disabling Fetch events')
         response = await self._execute_command(FetchCommands.disable())
         self._fetch_events_enabled = False
-        logger.debug('Fetch events disabled')
+        loguru_logger.debug('Fetch events disabled')
         return response
 
     async def disable_page_events(self):
         """禁用 CDP 页面域事件。"""
-        logger.debug('Disabling Page events')
+        loguru_logger.debug('Disabling Page events')
         response = await self._execute_command(PageCommands.disable())
         self._page_events_enabled = False
-        logger.debug('Page events disabled')
+        loguru_logger.debug('Page events disabled')
         return response
 
     async def disable_network_events(self):
         """禁用 CDP 网络域事件。"""
-        logger.debug('Disabling Network events')
+        loguru_logger.debug('Disabling Network events')
         response = await self._execute_command(NetworkCommands.disable())
         self._network_events_enabled = False
-        logger.debug('Network events disabled')
+        loguru_logger.debug('Network events disabled')
         return response
 
     async def disable_dom_events(self):
         """禁用 CDP DOM 域事件。"""
-        logger.debug('Disabling DOM events')
+        loguru_logger.debug('Disabling DOM events')
         response = await self._execute_command(DomCommands.disable())
         self._dom_events_enabled = False
-        logger.debug('DOM events disabled')
+        loguru_logger.debug('DOM events disabled')
         return response
 
     async def disable_runtime_events(self):
         """禁用 CDP 运行时域事件。"""
-        logger.debug('Disabling Runtime events')
+        loguru_logger.debug('Disabling Runtime events')
         response = await self._execute_command(RuntimeCommands.disable())
         self._runtime_events_enabled = False
-        logger.debug('Runtime events disabled')
+        loguru_logger.debug('Runtime events disabled')
         return response
 
     async def disable_intercept_file_chooser_dialog(self):
         """禁用文件选择器对话框拦截。"""
-        logger.info('Disabling file chooser interception')
+        loguru_logger.info('Disabling file chooser interception')
         response = await self._execute_command(
             PageCommands.set_intercept_file_chooser_dialog(False)
         )
         self._intercept_file_chooser_dialog_enabled = False
-        logger.debug('File chooser interception disabled')
+        loguru_logger.debug('File chooser interception disabled')
         return response
 
     async def disable_auto_solve_cloudflare_captcha(self):
         """禁用自动 Cloudflare Turnstile 验证码绕过。"""
-        logger.info('Disabling Cloudflare captcha auto-solve')
+        loguru_logger.info('Disabling Cloudflare captcha auto-solve')
         await self._connection_handler.remove_callback(self._cloudflare_captcha_callback_id)
         self._cloudflare_captcha_callback_id = None
 
@@ -508,10 +508,10 @@ class Tab(FindElementsMixin):
 
         注意：
             调用该方法后Tab实例失效。"""
-        logger.info(f'Closing tab: target_id={self._target_id}')
+        loguru_logger.info(f'Closing tab: target_id={self._target_id}')
         result = await self._execute_command(PageCommands.close())
         self._browser._tabs_opened.pop(self._target_id)
-        logger.debug('Tab closed and removed from browser registry')
+        loguru_logger.debug('Tab closed and removed from browser registry')
         return result
 
     async def get_frame(self, frame: 'WebElement') -> IFrame:
@@ -537,12 +537,12 @@ class Tab(FindElementsMixin):
             DeprecationWarning,
             stacklevel=2,
         )
-        logger.debug(f'Resolving iframe: tag={frame.tag_name}')
+        loguru_logger.debug(f'Resolving iframe: tag={frame.tag_name}')
         if not frame.tag_name == 'iframe':
             raise NotAnIFrame
 
         frame_url = frame.get_attribute('src')
-        logger.debug(f'Iframe src resolved: {frame_url}')
+        loguru_logger.debug(f'Iframe src resolved: {frame_url}')
         if not frame_url:
             raise InvalidIFrame('The iframe does not have a valid src attribute')
 
@@ -553,7 +553,7 @@ class Tab(FindElementsMixin):
 
         target_id = iframe_target['targetId']
         if target_id in self._browser._tabs_opened:
-            logger.debug(f'Iframe tab already tracked: {target_id}')
+            loguru_logger.debug(f'Iframe tab already tracked: {target_id}')
             return self._browser._tabs_opened[target_id]
 
         tab = Tab(
@@ -562,7 +562,7 @@ class Tab(FindElementsMixin):
             connection_port=self._connection_port,
         )
         self._browser._tabs_opened[target_id] = tab
-        logger.debug(f'Iframe tab created and registered: {target_id}')
+        loguru_logger.debug(f'Iframe tab created and registered: {target_id}')
         return tab
 
     async def find_shadow_roots(self, deep: bool = False, timeout: float = 0) -> list[ShadowRoot]:
@@ -590,7 +590,7 @@ class Tab(FindElementsMixin):
         加薪：
             WaitElementTimeout：如果超时> 0并且未找到影子根
                 在规定的期限内。"""
-        logger.debug('Finding all shadow roots in page (timeout=%s)', timeout)
+        loguru_logger.debug('Finding all shadow roots in page (timeout=%s)', timeout)
 
         if not timeout:
             return await self._collect_all_shadow_roots(deep)
@@ -630,13 +630,13 @@ class Tab(FindElementsMixin):
                 )
                 shadow_object_id = resolve_response['result']['object']['objectId']
             except (CommandExecutionTimeout, WebSocketConnectionClosed, KeyError):
-                logger.debug(f'Failed to resolve shadow root: backend_node_id={backend_node_id}')
+                loguru_logger.debug(f'Failed to resolve shadow root: backend_node_id={backend_node_id}')
                 continue
 
             try:
                 host_element = await self._resolve_shadow_host(host_backend_id)
             except (CommandExecutionTimeout, WebSocketConnectionClosed, KeyError):
-                logger.debug(f'Failed to resolve shadow host: backend_node_id={host_backend_id}')
+                loguru_logger.debug(f'Failed to resolve shadow host: backend_node_id={host_backend_id}')
                 host_element = None
             mode = ShadowRootType(shadow_data.get('shadowRootType', 'open'))
             shadow_roots.append(
@@ -652,7 +652,7 @@ class Tab(FindElementsMixin):
             oopif_roots = await self._collect_oopif_shadow_roots()
             shadow_roots.extend(oopif_roots)
 
-        logger.debug(f'Found {len(shadow_roots)} shadow roots')
+        loguru_logger.debug(f'Found {len(shadow_roots)} shadow roots')
         return shadow_roots
 
     async def _resolve_shadow_host(self, host_backend_id: int | None) -> WebElement | None:
@@ -680,7 +680,7 @@ class Tab(FindElementsMixin):
         iframe_targets = [t for t in target_infos if t.get('type') == 'iframe']
 
         if not iframe_targets:
-            logger.debug('No OOPIF targets found')
+            loguru_logger.debug('No OOPIF targets found')
             return []
 
         shadow_roots: list[ShadowRoot] = []
@@ -688,7 +688,7 @@ class Tab(FindElementsMixin):
             roots = await self._collect_shadow_roots_from_oopif_target(target, browser_handler)
             shadow_roots.extend(roots)
 
-        logger.debug(f'Found {len(shadow_roots)} shadow roots in OOPIFs')
+        loguru_logger.debug(f'Found {len(shadow_roots)} shadow roots in OOPIFs')
         return shadow_roots
 
     async def _collect_shadow_roots_from_oopif_target(
@@ -706,7 +706,7 @@ class Tab(FindElementsMixin):
             if not session_id:
                 return []
         except (CommandExecutionTimeout, WebSocketConnectionClosed):
-            logger.debug(f'Failed to attach to OOPIF target: {target_id}')
+            loguru_logger.debug(f'Failed to attach to OOPIF target: {target_id}')
             return []
 
         try:
@@ -717,7 +717,7 @@ class Tab(FindElementsMixin):
             )
             root_node = doc_response.get('result', {}).get('root', {})
         except (CommandExecutionTimeout, WebSocketConnectionClosed):
-            logger.debug(f'Failed to get document from OOPIF target: {target_id}')
+            loguru_logger.debug(f'Failed to get document from OOPIF target: {target_id}')
             return []
 
         entries: list[tuple[Node, int | None]] = []
@@ -759,7 +759,7 @@ class Tab(FindElementsMixin):
             )
             shadow_object_id = resolve_response['result']['object']['objectId']
         except (CommandExecutionTimeout, WebSocketConnectionClosed, KeyError):
-            logger.debug(f'Failed to resolve OOPIF shadow root: backend_node_id={backend_node_id}')
+            loguru_logger.debug(f'Failed to resolve OOPIF shadow root: backend_node_id={backend_node_id}')
             return None
 
         host_element = await self._resolve_oopif_shadow_host(
@@ -817,7 +817,7 @@ class Tab(FindElementsMixin):
                 mouse=self._mouse,
             )
         except (CommandExecutionTimeout, WebSocketConnectionClosed, KeyError):
-            logger.debug(f'Failed to resolve OOPIF shadow host: backend_node_id={host_backend_id}')
+            loguru_logger.debug(f'Failed to resolve OOPIF shadow host: backend_node_id={host_backend_id}')
             return None
 
     @staticmethod
@@ -837,25 +837,25 @@ class Tab(FindElementsMixin):
 
     async def bring_to_front(self):
         """将页面置于前面。"""
-        logger.info('Bringing page to front')
+        loguru_logger.info('Bringing page to front')
         return await self._execute_command(PageCommands.bring_to_front())
 
     async def get_cookies(self) -> list[Cookie]:
         """获取当前页面可访问的所有 cookie。"""
-        logger.debug('Fetching cookies for current page')
+        loguru_logger.debug('Fetching cookies for current page')
         if self._browser_context_id:
             response_storage: StorageGetCookiesResponse = await self._execute_command(
                 StorageCommands.get_cookies(self._browser_context_id)
             )
             cookies = response_storage['result']['cookies']
-            logger.debug(f'Fetched {len(cookies)} cookies')
+            loguru_logger.debug(f'Fetched {len(cookies)} cookies')
             return cookies
 
         response_network: NetworkGetCookiesResponse = await self._execute_command(
             NetworkCommands.get_cookies()
         )
         cookies = response_network['result']['cookies']
-        logger.debug(f'Fetched {len(cookies)} cookies')
+        loguru_logger.debug(f'Fetched {len(cookies)} cookies')
         return cookies
 
     async def get_network_response_body(self, request_id: str) -> str:
@@ -875,7 +875,7 @@ class Tab(FindElementsMixin):
         response: GetResponseBodyResponse = await self._execute_command(
             NetworkCommands.get_response_body(request_id)
         )
-        logger.debug(f'Retrieved network response body for request_id={request_id}')
+        loguru_logger.debug(f'Retrieved network response body for request_id={request_id}')
         return response['result']['body']
 
     async def get_network_logs(self, filter: Optional[str] = None) -> list[RequestWillBeSentEvent]:
@@ -897,7 +897,7 @@ class Tab(FindElementsMixin):
             logs = [
                 log for log in logs if filter in log['params'].get('request', {}).get('url', '')
             ]
-        logger.debug(f'Returning {len(logs)} network logs (filtered={bool(filter)})')
+        loguru_logger.debug(f'Returning {len(logs)} network logs (filtered={bool(filter)})')
         return logs
 
     async def set_cookies(self, cookies: list[CookieParam]):
@@ -908,14 +908,14 @@ class Tab(FindElementsMixin):
 
         注意：
             如果未指定，则默认为当前页面的域。"""
-        logger.info(f'Setting {len(cookies)} cookies on current page')
+        loguru_logger.info(f'Setting {len(cookies)} cookies on current page')
         return await self._execute_command(
             StorageCommands.set_cookies(cookies, self._browser_context_id)
         )
 
     async def delete_all_cookies(self):
         """从当前浏览器上下文中删除所有 cookie。"""
-        logger.info('从当前浏览器上下文中删除所有 cookie')
+        loguru_logger.info('从当前浏览器上下文中删除所有 cookie')
         return await self._execute_command(StorageCommands.clear_cookies(self._browser_context_id))
 
     async def go_to(self, url: str, timeout: int = 300):
@@ -928,13 +928,13 @@ class Tab(FindElementsMixin):
         加薪：
             NavigationError：如果导航失败（例如 DNS 错误）。
             PageLoadTimeout：如果页面在超时时间内未完成加载。"""
-        logger.debug(f'Navigating to URL: {url} (timeout={timeout}s)')
+        loguru_logger.debug(f'Navigating to URL: {url} (timeout={timeout}s)')
         async with self._wait_page_load(timeout=timeout):
             response: NavigateResponse = await self._execute_command(PageCommands.navigate(url))
             error_text = response['result'].get('errorText')
             if error_text:
                 raise NavigationError(url, error_text)
-        logger.debug(f'Navigation complete: {url}')
+        loguru_logger.debug(f'Navigation complete: {url}')
 
 
     async def refresh(
@@ -950,7 +950,7 @@ class Tab(FindElementsMixin):
 
         加薪：
             PageLoadTimeout：如果页面在超时时间内未完成加载。"""
-        logger.info(
+        loguru_logger.info(
             f'Reloading page (ignore_cache={ignore_cache}, '
             f'script_on_load={bool(script_to_evaluate_on_load)})'
         )
@@ -961,7 +961,7 @@ class Tab(FindElementsMixin):
                     script_to_evaluate_on_load=script_to_evaluate_on_load,
                 )
             )
-        logger.info('Page reloaded successfully')
+        loguru_logger.info('Page reloaded successfully')
 
     async def take_screenshot(
         self,
@@ -1007,7 +1007,7 @@ class Tab(FindElementsMixin):
 
         output_format = ScreenshotFormat.get_value(output_extension)
 
-        logger.info(
+        loguru_logger.info(
             f'Taking screenshot: path={path}, quality={quality}, '
             f'beyond_viewport={beyond_viewport}, as_base64={as_base64}'
         )
@@ -1028,14 +1028,14 @@ class Tab(FindElementsMixin):
             )
 
         if as_base64:
-            logger.info('Screenshot captured and returned as base64')
+            loguru_logger.info('Screenshot captured and returned as base64')
             return screenshot_data
 
         if path:
             screenshot_bytes = decode_base64_to_bytes(screenshot_data)
             async with aiofiles.open(str(path), 'wb') as file:
                 await file.write(screenshot_bytes)
-            logger.info(f'Screenshot saved to: {path}')
+            loguru_logger.info(f'Screenshot saved to: {path}')
 
         return None
 
@@ -1063,7 +1063,7 @@ class Tab(FindElementsMixin):
 
         加薪：
             ValueError：如果 as_base64=False 时未提供路径。"""
-        logger.info(
+        loguru_logger.info(
             f'Generating PDF: path={path}, landscape={landscape}, '
             f'header_footer={display_header_footer}, print_bg={print_background}, '
             f'scale={scale}, as_base64={as_base64}'
@@ -1078,7 +1078,7 @@ class Tab(FindElementsMixin):
         )
         pdf_data = response['result']['data']
         if as_base64:
-            logger.info('PDF generated and returned as base64')
+            loguru_logger.info('PDF generated and returned as base64')
             return pdf_data
 
         if path is None:
@@ -1087,7 +1087,7 @@ class Tab(FindElementsMixin):
         pdf_bytes = decode_base64_to_bytes(pdf_data)
         async with aiofiles.open(path, 'wb') as file:
             await file.write(pdf_bytes)
-        logger.info(f'PDF saved to: {path}')
+        loguru_logger.info(f'PDF saved to: {path}')
 
         return None
 
@@ -1110,7 +1110,7 @@ class Tab(FindElementsMixin):
         if path.suffix.lower() != '.zip':
             raise InvalidFileExtension(f'Expected .zip extension, got {path.suffix!r}')
 
-        logger.info(f'Saving page bundle: path={path}, inline={inline_assets}')
+        loguru_logger.info(f'Saving page bundle: path={path}, inline={inline_assets}')
 
         page_was_enabled = self.page_events_enabled
         if not page_was_enabled:
@@ -1138,7 +1138,7 @@ class Tab(FindElementsMixin):
 
             async with aiofiles.open(path, 'wb') as f:
                 await f.write(buf.getvalue())
-            logger.info(f'Page bundle saved to: {path}')
+            loguru_logger.info(f'Page bundle saved to: {path}')
         finally:
             if not page_was_enabled:
                 await self.disable_page_events()
@@ -1157,7 +1157,7 @@ class Tab(FindElementsMixin):
                 html = _b64.b64decode(html).decode('utf-8', errors='replace')
             return html
         except Exception:
-            logger.debug('getResourceContent failed for document, falling back to JS')
+            loguru_logger.debug('getResourceContent failed for document, falling back to JS')
             response = await self.execute_script('return document.documentElement.outerHTML')
             return cast(str, response['result']['result']['value'])
 
@@ -1179,12 +1179,12 @@ class Tab(FindElementsMixin):
         asset_map: dict[str, tuple[str, bytes, str, ResourceType]] = {}
         for idx, ((_fid, res), result) in enumerate(zip(fetchable, results)):
             if isinstance(result, BaseException):
-                logger.warning(f'Failed to fetch resource {res["url"]}: {result}')
+                loguru_logger.warning(f'Failed to fetch resource {res["url"]}: {result}')
                 continue
             response: GetResourceContentResponse = result
             content_result = response.get('result')
             if content_result is None:
-                logger.warning(f'No result for resource {res["url"]}: {response.get("error")}')
+                loguru_logger.warning(f'No result for resource {res["url"]}: {response.get("error")}')
                 continue
             raw_content: str = content_result['content']
             is_base64: bool = content_result.get('base64Encoded', False)
@@ -1199,7 +1199,7 @@ class Tab(FindElementsMixin):
         注意：
             必须启用页面事件才能检测对话框。"""
         if self._connection_handler.dialog:
-            logger.debug('Dialog present')
+            loguru_logger.debug('Dialog present')
             return True
 
         return False
@@ -1212,7 +1212,7 @@ class Tab(FindElementsMixin):
         if not await self.has_dialog():
             raise NoDialogPresent()
         message = self._connection_handler.dialog['params']['message']
-        logger.debug(f'Dialog message retrieved: {message}')
+        loguru_logger.debug(f'Dialog message retrieved: {message}')
         return message
 
     async def handle_dialog(self, accept: bool, prompt_text: Optional[str] = None):
@@ -1229,7 +1229,7 @@ class Tab(FindElementsMixin):
             必须启用页面事件才能处理对话框。"""
         if not await self.has_dialog():
             raise NoDialogPresent()
-        logger.info(f'Handling dialog: accept={accept}, has_prompt_text={bool(prompt_text)}')
+        loguru_logger.info(f'Handling dialog: accept={accept}, has_prompt_text={bool(prompt_text)}')
         return await self._execute_command(
             PageCommands.handle_javascript_dialog(accept=accept, prompt_text=prompt_text)
         )
@@ -1350,7 +1350,7 @@ class Tab(FindElementsMixin):
 
             # 在元素上执行脚本以设置其值
             等待 page.execute_script('argument.value = "Hello"', element)"""
-        logger.debug(f'Executing script: with_element={bool(element)}, length={len(script)}')
+        loguru_logger.debug(f'Executing script: with_element={bool(element)}, length={len(script)}')
         if element is not None:
             warnings.warn(
                 'Passing a WebElement to Tab.execute_script() is deprecated. '
@@ -1395,7 +1395,7 @@ class Tab(FindElementsMixin):
             unique_context_id=unique_context_id,
             serialization_options=serialization_options,
         )
-        logger.debug(f'Executing script without element: length={len(script)}')
+        loguru_logger.debug(f'Executing script without element: length={len(script)}')
         result: Union[EvaluateResponse, CallFunctionOnResponse] = await self._execute_command(
             command
         )
@@ -1413,7 +1413,7 @@ class Tab(FindElementsMixin):
         intercept_response: Optional[bool] = None,
     ):
         """继续暂停的请求而不进行修改。"""
-        logger.debug(f'Continue request on tab: id={request_id}')
+        loguru_logger.debug(f'Continue request on tab: id={request_id}')
         return await self._execute_command(
             FetchCommands.continue_request(
                 request_id=request_id,
@@ -1427,7 +1427,7 @@ class Tab(FindElementsMixin):
 
     async def fail_request(self, request_id: str, error_reason: ErrorReason):
         """请求失败并显示错误代码。"""
-        logger.debug(f'Fail request on tab: id={request_id}, reason={error_reason}')
+        loguru_logger.debug(f'Fail request on tab: id={request_id}, reason={error_reason}')
         return await self._execute_command(FetchCommands.fail_request(request_id, error_reason))
 
     async def fulfill_request(
@@ -1439,7 +1439,7 @@ class Tab(FindElementsMixin):
         response_phrase: Optional[str] = None,
     ):
         """使用响应数据完成请求。"""
-        logger.debug(
+        loguru_logger.debug(
             f'Fulfill request on tab: id={request_id}, code={response_code}, '
             f'headers_set={bool(response_headers)}, body_set={bool(body)}'
         )
@@ -1464,7 +1464,7 @@ class Tab(FindElementsMixin):
 
         当启用 Fetch 时，对于代理身份验证 (407) 或服务器身份验证 (401) 很有用
         与handle_auth = True。"""
-        logger.debug(
+        loguru_logger.debug(
             f'Continue with auth on tab: id={request_id}, response={auth_challenge_response}, '
             f'user_set={bool(proxy_username)}'
         )
@@ -1487,7 +1487,7 @@ class Tab(FindElementsMixin):
             files：用于上传的文件路径。"""
 
         async def event_handler(event: FileChooserOpenedEvent):
-            logger.info('File chooser opened; setting files')
+            loguru_logger.info('File chooser opened; setting files')
             file_list = [str(file) for file in files] if isinstance(files, list) else [str(files)]
             await self._execute_command(
                 DomCommands.set_file_input_files(
@@ -1495,7 +1495,7 @@ class Tab(FindElementsMixin):
                     backend_node_id=event['params']['backendNodeId'],
                 )
             )
-            logger.debug(f'Files set on input: {file_list}')
+            loguru_logger.debug(f'Files set on input: {file_list}')
 
         if self.page_events_enabled is False:
             _before_page_events_enabled = False
@@ -1506,7 +1506,7 @@ class Tab(FindElementsMixin):
         if self.intercept_file_chooser_dialog_enabled is False:
             await self.enable_intercept_file_chooser_dialog()
 
-        logger.info('Waiting for file chooser to open')
+        loguru_logger.info('Waiting for file chooser to open')
         await self.on(
             PageEvent.FILE_CHOOSER_OPENED,
             cast(Callable[[dict], Any], event_handler),
@@ -1568,7 +1568,7 @@ class Tab(FindElementsMixin):
         if not _before_page_events_enabled:
             await self.enable_page_events()
 
-        logger.info('Expecting and bypassing Cloudflare captcha if present')
+        loguru_logger.info('Expecting and bypassing Cloudflare captcha if present')
         callback_id = await self.on(PageEvent.LOAD_EVENT_FIRED, bypass_cloudflare)
 
         try:
@@ -1608,7 +1608,7 @@ class Tab(FindElementsMixin):
             download_dir = str(Path(keep_file_at))
             Path(download_dir).mkdir(parents=True, exist_ok=True)
 
-        logger.info(f'Expecting download (dir={download_dir}, timeout={download_timeout}s)')
+        loguru_logger.info(f'Expecting download (dir={download_dir}, timeout={download_timeout}s)')
         await self._browser.set_download_behavior(
             behavior=DownloadBehavior.ALLOW,
             download_path=download_dir,
@@ -1638,7 +1638,7 @@ class Tab(FindElementsMixin):
             state['suggestedFilename'] = params['suggestedFilename']
             if not will_begin.done():
                 will_begin.set_result(True)
-            logger.info(
+            loguru_logger.info(
                 f'Download will begin: url={state["url"]}, filename={state["suggestedFilename"]}'
             )
 
@@ -1657,7 +1657,7 @@ class Tab(FindElementsMixin):
             state['filePath'] = file_path
             if not done.done():
                 done.set_result(True)
-            logger.info(f'Download completed: {file_path}')
+            loguru_logger.info(f'Download completed: {file_path}')
 
         await self.on(
             PageEvent.DOWNLOAD_WILL_BEGIN,
@@ -1753,7 +1753,7 @@ class Tab(FindElementsMixin):
         else:
             function_to_register = callback
 
-        logger.debug(
+        loguru_logger.debug(
             f'Registering callback on tab: event={event_name}, temporary={temporary}, '
             f'async={asyncio.iscoroutinefunction(callback)}'
         )
@@ -1763,19 +1763,19 @@ class Tab(FindElementsMixin):
 
     async def remove_callback(self, callback_id: int):
         """从选项卡中删除回调。"""
-        logger.debug(f'Removing callback from tab: id={callback_id}')
+        loguru_logger.debug(f'Removing callback from tab: id={callback_id}')
         return await self._connection_handler.remove_callback(callback_id)
 
     async def clear_callbacks(self):
         """清除所有已注册的事件回调。"""
-        logger.debug('Clearing all callbacks from tab')
+        loguru_logger.debug('Clearing all callbacks from tab')
         await self._connection_handler.clear_callbacks()
 
     def _get_connection_handler(self) -> ConnectionHandler:
         if self._ws_address:
-            logger.debug('Using WebSocket address for connection handler')
+            loguru_logger.debug('Using WebSocket address for connection handler')
             return ConnectionHandler(ws_address=self._ws_address)
-        logger.debug(
+        loguru_logger.debug(
             'Using port/target for connection handler: '
             f'port={self._connection_port}, target_id={self._target_id}'
         )
@@ -1884,14 +1884,14 @@ class Tab(FindElementsMixin):
             page_loaded.set()
 
         callback_id = await self.on(event_name, on_loaded)
-        logger.debug(f'Waiting for page load via {event_name} (timeout={timeout}s)')
+        loguru_logger.debug(f'Waiting for page load via {event_name} (timeout={timeout}s)')
 
         try:
             yield
             await asyncio.wait_for(page_loaded.wait(), timeout=timeout)
-            logger.debug(f'Page load event received: {event_name}')
+            loguru_logger.debug(f'Page load event received: {event_name}')
         except asyncio.TimeoutError:
-            logger.error(f'Page load timeout after {timeout}s waiting for {event_name}')
+            loguru_logger.error(f'Page load timeout after {timeout}s waiting for {event_name}')
             raise PageLoadTimeout()
         finally:
             with contextlib.suppress(Exception):
@@ -1950,7 +1950,7 @@ class Tab(FindElementsMixin):
             checkbox = await inner_shadow.query(_CLOUDFLARE_CHECKBOX_SELECTOR, timeout=timeout_int)
             await checkbox.click()
         except Exception as exc:
-            logger.error(f'cloudflare验证错误: {exc}')
+            loguru_logger.error(f'cloudflare验证错误: {exc}')
 
     async def cf(self,time_to_wait_captcha: float = 5) -> None:
         await self._bypass_cloudflare(event=None, time_to_wait_captcha=time_to_wait_captcha)

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ljp_page.logger import logger
+from ljp_page.logger import loguru_logger
 from typing import TYPE_CHECKING, Optional
 
 __all__ = ['ProxyManager']
@@ -22,7 +22,7 @@ class ProxyManager:
             options：可能包含代理配置的浏览器选项。
                 如果找到凭据将进行修改。"""
         self.options = options
-        logger.debug('ProxyManager initialized with options')
+        loguru_logger.debug('ProxyManager initialized with options')
 
     def get_proxy_credentials(self) -> tuple[bool, tuple[Optional[str], Optional[str]]]:
         """提取并保护代理身份验证凭据。
@@ -45,11 +45,11 @@ class ProxyManager:
                 self._update_proxy_argument(index, clean_proxy)
                 private_proxy = True
                 credentials = (username, password)
-                logger.debug(
+                loguru_logger.debug(
                     f'Proxy credentials extracted (user_set={bool(username)}); argument sanitized'
                 )
             else:
-                logger.debug('Proxy configured without embedded credentials')
+                loguru_logger.debug('Proxy configured without embedded credentials')
 
         return private_proxy, credentials
 
@@ -61,7 +61,7 @@ class ProxyManager:
         for index, arg in enumerate(self.options.arguments):
             if arg.startswith('--proxy-server='):
                 value = arg.split('=', 1)[1]
-                logger.debug(f'Found proxy argument at index {index}: {value}')
+                loguru_logger.debug(f'Found proxy argument at index {index}: {value}')
                 return index, value
         return None
 
@@ -95,4 +95,4 @@ class ProxyManager:
     def _update_proxy_argument(self, index: int, clean_proxy: str) -> None:
         """将代理参数替换为无凭据版本。"""
         self.options.arguments[index] = f'--proxy-server={clean_proxy}'
-        logger.debug(f'Proxy argument updated at index {index}: {clean_proxy}')
+        loguru_logger.debug(f'Proxy argument updated at index {index}: {clean_proxy}')

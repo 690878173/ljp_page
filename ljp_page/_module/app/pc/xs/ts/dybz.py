@@ -8,7 +8,7 @@ from ljp_page._module.app.pc.base import Config
 from ljp_page._module.request.html import Html
 from ljp_page._module.app.pc.base import P1Item, P1Result, P2Item, P2Result, P3Item
 from ljp_page._module.app.pc.xs.xs import Xs
-from ljp_page.logger import logger
+from ljp_page.logger import loguru_logger
 
 from ljp_page._module.ocr import Ocr
 
@@ -190,7 +190,7 @@ class Md(Xs):
         no_in_ls = ['绿', '近代现代', 'GL百合','[穿越重生]','[BL同人]','[古代架空]']
         for no in no_in_ls:
             if no in name:
-                logger.warning(f'跳过->{name}')
+                loguru_logger.warning(f'跳过->{name}')
                 return None
         return name
 
@@ -309,7 +309,7 @@ class Md(Xs):
 
             return P3Item(url=url,name=title,content=content,next_url=next_url)
         except Exception as e:
-            logger.error(e)
+            loguru_logger.error(e)
             raise LjpBaseException(message=f'出错') from e
 
 if __name__ == '__main__':

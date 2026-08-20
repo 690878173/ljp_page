@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, Optional, Union
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 
-from ljp_page._core.logger import logger
+from ljp_page._core.logger import loguru_logger
 
 from .exceptions import HTTP_Fetch_error
 from ljp_page._core.utils.other import f_mark
@@ -168,7 +168,7 @@ class Request:
         final_url = self._build_url_with_params(url, params)
         options = self._build_request_options(method, headers, json, data, **kwargs)
         # logger.info(f'Executing request: method={method.upper()}, url={final_url}')
-        logger.debug(
+        loguru_logger.debug(
             f'Executing request: method={method.upper()}, url={final_url}, '
             f'headers={bool(headers)}, json={json is not None}, data={data is not None}'
         )
@@ -179,7 +179,7 @@ class Request:
             return self._check_response(result)
 
         except Exception as exc:
-            logger.error(f'Request failed: {exc}')
+            loguru_logger.error(f'Request failed: {exc}')
             raise HTTP_Fetch_error(f'Request failed: {str(exc)}') from exc
 
     # ── URL 构建 ──
@@ -187,7 +187,7 @@ class Request:
     @staticmethod
     def _build_url_with_params(url: str, params: Optional[dict[str, str]]) -> str:
         """使用查询参数构建最终 URL。"""
-        logger.debug(f'Building URL with params: url={url}, params={params}')
+        loguru_logger.debug(f'Building URL with params: url={url}, params={params}')
         if not params:
             return url
 
@@ -209,7 +209,7 @@ class Request:
             'headers': headers_dict,
             **kwargs,
         }
-        logger.debug(f'Building request options: options={options}')
+        loguru_logger.debug(f'Building request options: options={options}')
         self._add_request_body(options, json, data)
         return options
 
@@ -226,7 +226,7 @@ class Request:
         """处理 JSON 选项。"""
         options['body'] = jsonlib.dumps(json)
         options['headers'].setdefault('Content-Type', 'application/json')
-        logger.debug('Request JSON body set and content-type applied')
+        loguru_logger.debug('Request JSON body set and content-type applied')
 
     @staticmethod
     def _handle_data_options(options: dict[str, Any], data: Optional[Union[dict, list, tuple, str, bytes]]) -> None:
@@ -234,16 +234,16 @@ class Request:
         if isinstance(data, (dict, list, tuple)):
             options['body'] = urlencode(data, doseq=True)
             options['headers'].setdefault('Content-Type', 'application/x-www-form-urlencoded')
-            logger.debug('Request data encoded as form-urlencoded')
+            loguru_logger.debug('Request data encoded as form-urlencoded')
         else:
             options['body'] = data
-            logger.debug('Request data set as raw payload')
+            loguru_logger.debug('Request data set as raw payload')
 
     async def _execute_fetch_request(self, url: str, options: dict[str, Any]):
         """使用浏览器的运行时执行获取请求。"""
         script = Scripts.MAKE_REQUEST.format(url=jsonlib.dumps(url), options=jsonlib.dumps(options))
         # await self._register_callbacks()
-        logger.debug('Registered network callbacks and executing fetch via Runtime.evaluate')
+        loguru_logger.debug('Registered network callbacks and executing fetch via Runtime.evaluate')
 
         return await self.page.execute_command(expression=script)
 
@@ -259,7 +259,7 @@ class Request:
 
         返回：
             将标头名称映射到值的字典。"""
-        logger.debug(f'Converting header entries to dictionary: headers={headers}')
+        loguru_logger.debug(f'Converting header entries to dictionary: headers={headers}')
         return {header['name']: header['value'] for header in headers}
 
     def build_send(self,final_url,options):

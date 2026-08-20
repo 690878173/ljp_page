@@ -1,4 +1,4 @@
-from ljp_page.logger import logger
+from ljp_page.logger import loguru_logger
 import subprocess
 from typing import Callable, Optional
 
@@ -25,7 +25,7 @@ class BrowserProcessManager:
                 如果没有，则使用默认子流程实现。"""
         self._process_creator = process_creator or self._default_process_creator
         self._process: Optional[subprocess.Popen] = None
-        logger.debug(
+        loguru_logger.debug(
             f'BrowserProcessManager initialized; custom process_creator={bool(process_creator)}'
         )
 
@@ -47,15 +47,15 @@ class BrowserProcessManager:
 
         注意：
             自动添加 --remote-debugging-port 参数。"""
-        logger.debug(f'Starting browser process: {binary_location} on port {port}')
+        loguru_logger.debug(f'Starting browser process: {binary_location} on port {port}')
         command = [
             binary_location,
             f'--remote-debugging-port={port}',
             *arguments,
         ]
-        logger.debug(f'Command: {command}')
+        loguru_logger.debug(f'Command: {command}')
         self._process = self._process_creator(command)
-        logger.debug(
+        loguru_logger.debug(
             f'Browser process started: pid={self._process.pid if self._process else "unknown"}'
         )
         return self._process
@@ -63,7 +63,7 @@ class BrowserProcessManager:
     @staticmethod
     def _default_process_creator(command: list[str]) -> subprocess.Popen:
         """创建具有输出捕获的浏览器进程，以防止控制台混乱。"""
-        logger.debug(f'Creating process: {command}')
+        loguru_logger.debug(f'Creating process: {command}')
         return subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
     def stop_process(self):
@@ -72,12 +72,12 @@ class BrowserProcessManager:
         首先尝试 SIGTERM，然后在 15 秒超时后尝试 SIGKILL。
         即使没有进程正在运行，也可以安全调用。"""
         if self._process:
-            logger.info(f'Stopping browser process pid={self._process.pid}')
+            loguru_logger.info(f'Stopping browser process pid={self._process.pid}')
             self._process.terminate()
             try:
                 self._process.wait(timeout=15)
-                logger.debug('Process terminated gracefully')
+                loguru_logger.debug('Process terminated gracefully')
             except subprocess.TimeoutExpired:
-                logger.warning('Process did not terminate in 15s; sending SIGKILL')
+                loguru_logger.warning('Process did not terminate in 15s; sending SIGKILL')
                 self._process.kill()
-                logger.debug('Process killed')
+                loguru_logger.debug('Process killed')

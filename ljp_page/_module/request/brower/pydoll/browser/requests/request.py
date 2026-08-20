@@ -26,7 +26,7 @@ from network.events import (
 )
 from network.types import CookieParam, ResourceType
 
-from ljp_page.logger import logger
+from ljp_page.logger import loguru_logger
 
 __all__ = ['Request']
 
@@ -90,7 +90,7 @@ class Request:
         self._callback_ids: list[int] = []
         self._requests_sent: list[RequestSentEvent] = []
         self._requests_received: list[RequestReceivedEvent] = []
-        logger.debug('Request helper initialized for tab')
+        loguru_logger.debug('Request helper initialized for tab')
 
     async def request(
         self,
@@ -137,8 +137,8 @@ class Request:
             - 身份验证标头从浏览器会话中保留"""
         final_url = self._build_url_with_params(url, params)
         options = self._build_request_options(method, headers, json, data, **kwargs)
-        logger.info(f'Executing request: method={method.upper()}, url={final_url}')
-        logger.debug(
+        loguru_logger.info(f'Executing request: method={method.upper()}, url={final_url}')
+        loguru_logger.debug(
             f'Executing request: method={method.upper()}, url={final_url}, '
             f'headers={bool(headers)}, json={json is not None}, data={data is not None}'
         )
@@ -150,7 +150,7 @@ class Request:
             return self._build_response(result, received_headers, sent_headers, cookies)
 
         except Exception as exc:
-            logger.error(f'Request failed: {exc}')
+            loguru_logger.error(f'Request failed: {exc}')
             raise HTTPError(f'Request failed: {str(exc)}') from exc
 
         finally:
@@ -310,7 +310,7 @@ class Request:
     @staticmethod
     def _build_url_with_params(url: str, params: Optional[dict[str, str]]) -> str:
         """使用查询参数构建最终 URL。"""
-        logger.debug(f'Building URL with params: url={url}, params={params}')
+        loguru_logger.debug(f'Building URL with params: url={url}, params={params}')
         if not params:
             return url
 
@@ -336,7 +336,7 @@ class Request:
             'headers': headers_dict,
             **kwargs,
         }
-        logger.debug(f'Building request options: options={options}')
+        loguru_logger.debug(f'Building request options: options={options}')
         self._add_request_body(options, json, data)
         return options
 
@@ -357,7 +357,7 @@ class Request:
         """处理 JSON 选项。"""
         options['body'] = jsonlib.dumps(json)
         options['headers'].setdefault('Content-Type', 'application/json')
-        logger.debug('Request JSON body set and content-type applied')
+        loguru_logger.debug('Request JSON body set and content-type applied')
 
     @staticmethod
     def _handle_data_options(
@@ -367,16 +367,16 @@ class Request:
         if isinstance(data, (dict, list, tuple)):
             options['body'] = urlencode(data, doseq=True)
             options['headers'].setdefault('Content-Type', 'application/x-www-form-urlencoded')
-            logger.debug('Request data encoded as form-urlencoded')
+            loguru_logger.debug('Request data encoded as form-urlencoded')
         else:
             options['body'] = data
-            logger.debug('Request data set as raw payload')
+            loguru_logger.debug('Request data set as raw payload')
 
     async def _execute_fetch_request(self, url: str, options: dict[str, Any]) -> EvaluateResponse:
         """使用浏览器的运行时执行获取请求。"""
         script = Scripts.MAKE_REQUEST.format(url=jsonlib.dumps(url), options=jsonlib.dumps(options))
         await self._register_callbacks()
-        logger.debug('Registered network callbacks and executing fetch via Runtime.evaluate')
+        loguru_logger.debug('Registered network callbacks and executing fetch via Runtime.evaluate')
 
         return await self.tab._execute_command(
             RuntimeCommands.evaluate(
@@ -395,7 +395,7 @@ class Request:
     ) -> Response:
         """从获取结果构建 Response 对象。"""
         result_value = result['result']['result']['value']
-        logger.debug(f'Building response: result_value={result_value}')
+        loguru_logger.debug(f'Building response: result_value={result_value}')
         return Response(
             status_code=result_value['status'],
             content=bytes(result_value.get('content', b'')),
@@ -419,15 +419,15 @@ class Request:
         if not self.tab.network_events_enabled:
             await self.tab.enable_network_events()
             self._network_events_enabled = True
-            logger.debug('Network events enabled on tab for request capture')
+            loguru_logger.debug('Network events enabled on tab for request capture')
 
         def append_received_request(event: dict) -> None:
             self._requests_received.append(cast(RequestReceivedEvent, event))
-            logger.debug(f'Appended received request: event={event}')
+            loguru_logger.debug(f'Appended received request: event={event}')
 
         def append_sent_request(event: dict) -> None:
             self._requests_sent.append(cast(RequestSentEvent, event))
-            logger.debug(f'Appended sent request: event={event}')
+            loguru_logger.debug(f'Appended sent request: event={event}')
 
         self._callback_ids = [
             await self.tab.on(
@@ -460,7 +460,7 @@ class Request:
         if self._network_events_enabled:
             await self.tab.disable_network_events()
             self._network_events_enabled = False
-            logger.debug('Network events disabled on tab after request')
+            loguru_logger.debug('Network events disabled on tab after request')
 
     def _extract_received_headers(self) -> list[HeaderEntry]:
         """从响应网络事件中提取标头。
@@ -505,23 +505,23 @@ class Request:
             来自多个事件类型的重复条目。"""
         headers: list[HeaderEntry] = []
         seen = set()
-        logger.debug(f'Extracting headers from events: events={events}')
+        loguru_logger.debug(f'Extracting headers from events: events={events}')
         for event in events:
             params = event['params']
             for key, extractor in event_extractors.items():
                 if key in params:
                     extracted_headers = extractor(params)
-                    logger.debug(f'Extracted headers: extracted_headers={extracted_headers}')
+                    loguru_logger.debug(f'Extracted headers: extracted_headers={extracted_headers}')
                     for header in extracted_headers:
                         identity = (header['name'], header['value'])
-                        logger.debug(f'Identity: identity={identity}')
+                        loguru_logger.debug(f'Identity: identity={identity}')
                         if identity not in seen:
                             headers.append(header)
                             seen.add(identity)
-                            logger.debug(f'Added header: header={header}')
+                            loguru_logger.debug(f'Added header: header={header}')
                     break
 
-        logger.debug(f'Headers extracted: headers={headers}')
+        loguru_logger.debug(f'Headers extracted: headers={headers}')
         return headers
 
     def _extract_request_sent_headers(
@@ -535,7 +535,7 @@ class Request:
         返回：
             随请求发送的标头列表。"""
         request = params['request']
-        logger.debug(f'Extracting request sent headers: request={request}')
+        loguru_logger.debug(f'Extracting request sent headers: request={request}')
         return self._convert_dict_to_header_entries(request.get('headers', {}))
 
     def _extract_request_sent_extra_info_headers(
@@ -551,7 +551,7 @@ class Request:
 
         返回：
             随请求发送的附加标头列表。"""
-        logger.debug(f'Extracting request sent extra info headers: params={params}')
+        loguru_logger.debug(f'Extracting request sent extra info headers: params={params}')
         return self._convert_dict_to_header_entries(params.get('headers', {}))
 
     def _extract_response_received_headers(
@@ -565,7 +565,7 @@ class Request:
         返回：
             从服务器接收的标头列表。"""
         response = params['response']
-        logger.debug(f'Extracting response received headers: response={response}')
+        loguru_logger.debug(f'Extracting response received headers: response={response}')
         return self._convert_dict_to_header_entries(response.get('headers', {}))
 
     def _extract_response_received_extra_info_headers(
@@ -582,7 +582,7 @@ class Request:
 
         返回：
             从服务器接收的附加标头列表。"""
-        logger.debug(f'Extracting response received extra info headers: params={params}')
+        loguru_logger.debug(f'Extracting response received extra info headers: params={params}')
         return self._convert_dict_to_header_entries(params.get('headers', {}))
 
     @staticmethod
@@ -594,7 +594,7 @@ class Request:
 
         返回：
             具有“name”和“value”键的 HeaderEntry 对象列表。"""
-        logger.debug(f'Converting dictionary to header entries: headers_dict={headers_dict}')
+        loguru_logger.debug(f'Converting dictionary to header entries: headers_dict={headers_dict}')
         return [HeaderEntry(name=name, value=value) for name, value in headers_dict.items()]
 
     def _extract_set_cookies(self) -> list[CookieParam]:
@@ -607,26 +607,26 @@ class Request:
         返回：
             从 Set-Cookie 标头中提取的唯一 cookie 列表。"""
         cookies: list[CookieParam] = []
-        logger.debug(f'Extracting set cookies: cookies={cookies}')
+        loguru_logger.debug(f'Extracting set cookies: cookies={cookies}')
         response_extra_info_events = self._filter_response_extra_info_events()
-        logger.debug(
+        loguru_logger.debug(
             f'Filtering response extra info events: '
             f'response_extra_info_events={response_extra_info_events}'
         )
         for event in response_extra_info_events:
             params = cast(ResponseReceivedExtraInfoEventParams, event['params'])
             headers = self._convert_dict_to_header_entries(params['headers'])
-            logger.debug(f'Converting dictionary to header entries: headers={headers}')
+            loguru_logger.debug(f'Converting dictionary to header entries: headers={headers}')
             set_cookie_headers = [
                 header['value'] for header in headers if header['name'] == 'Set-Cookie'
             ]
-            logger.debug(f'Set cookie headers: set_cookie_headers={set_cookie_headers}')
+            loguru_logger.debug(f'Set cookie headers: set_cookie_headers={set_cookie_headers}')
             if set_cookie_headers:
                 for set_cookie_header in set_cookie_headers:
                     self._add_unique_cookies(
                         cookies, self._parse_set_cookie_header(set_cookie_header)
                     )
-        logger.debug(f'Set cookies extracted: cookies={cookies}')
+        loguru_logger.debug(f'Set cookies extracted: cookies={cookies}')
         return cookies
 
     def _filter_response_extra_info_events(self) -> list[RequestReceivedEvent]:
@@ -634,7 +634,7 @@ class Request:
 
         返回：
             包含额外响应信息（包括 cookie）的事件列表。"""
-        logger.debug(
+        loguru_logger.debug(
             f'Filtering response extra info events: requests_received={self._requests_received}'
         )
         return [
@@ -656,13 +656,13 @@ class Request:
             包含名称和值的已解析 cookie 对象列表。"""
         cookies = []
         lines = set_cookie_header.split('\n')
-        logger.debug(f'Parsing set cookie header: set_cookie_header={set_cookie_header}')
+        loguru_logger.debug(f'Parsing set cookie header: set_cookie_header={set_cookie_header}')
         for line in lines:
             cookie = self._parse_cookie_line(line)
             if cookie:
-                logger.debug(f'Parsed cookie: cookie={cookie}')
+                loguru_logger.debug(f'Parsed cookie: cookie={cookie}')
                 cookies.append(cookie)
-        logger.debug(f'Parsed cookies: cookies={cookies}')
+        loguru_logger.debug(f'Parsed cookies: cookies={cookies}')
         return cookies
 
     @staticmethod
@@ -696,12 +696,12 @@ class Request:
         参数：
             cookies：要添加到的现有 cookie 列表。
             new_cookies：要添加的新 cookie（如果尚未存在）。"""
-        logger.debug(f'Adding unique cookies: cookies={cookies}, new_cookies={new_cookies}')
+        loguru_logger.debug(f'Adding unique cookies: cookies={cookies}, new_cookies={new_cookies}')
         for cookie in new_cookies:
             if cookie not in cookies:
                 cookies.append(cookie)
-                logger.debug(f'Added unique cookie: cookie={cookie}')
-        logger.debug(f'Unique cookies added: cookies={cookies}')
+                loguru_logger.debug(f'Added unique cookie: cookie={cookie}')
+        loguru_logger.debug(f'Unique cookies added: cookies={cookies}')
 
     @staticmethod
     def _convert_header_entries_to_dict(headers: list[HeaderEntry]) -> dict[str, str]:
@@ -715,5 +715,5 @@ class Request:
 
         返回：
             将标头名称映射到值的字典。"""
-        logger.debug(f'Converting header entries to dictionary: headers={headers}')
+        loguru_logger.debug(f'Converting header entries to dictionary: headers={headers}')
         return {header['name']: header['value'] for header in headers}

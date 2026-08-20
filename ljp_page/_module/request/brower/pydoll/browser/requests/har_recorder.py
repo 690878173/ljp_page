@@ -50,7 +50,7 @@ if TYPE_CHECKING:
     from network.types import ResourceTiming
     from network.types import Response as CDPResponse
 
-from ljp_page.logger import logger
+from ljp_page.logger import loguru_logger
 
 _PYDOLL_CREATOR_NAME = 'pydoll'
 _HTTP_NOT_MODIFIED = 304
@@ -90,7 +90,7 @@ class HarRecorder:
         if not self._tab.network_events_enabled:
             await self._tab.enable_network_events()
             self._network_was_enabled = True
-            logger.debug('HAR recorder enabled network events')
+            loguru_logger.debug('HAR recorder enabled network events')
 
         self._start_time = datetime.now(tz=timezone.utc)
 
@@ -109,7 +109,7 @@ class HarRecorder:
             callback_id = await self._tab.on(event_name, handler)
             self._callback_ids.append(callback_id)
 
-        logger.info('HAR recorder started, registered %d callbacks', len(self._callback_ids))
+        loguru_logger.info('HAR recorder started, registered %d callbacks', len(self._callback_ids))
 
     async def stop(self) -> None:
         """停止录制并清理。
@@ -130,7 +130,7 @@ class HarRecorder:
             await self._tab.disable_network_events()
             self._network_was_enabled = False
 
-        logger.info('HAR recorder stopped, captured %d entries', len(self._entries))
+        loguru_logger.info('HAR recorder stopped, captured %d entries', len(self._entries))
 
     def _on_request_will_be_sent(self, event: RequestWillBeSentEvent) -> None:
         """处理 Network.requestWillBeSent 事件。"""
@@ -155,7 +155,7 @@ class HarRecorder:
             'resource_type': params.get('type', ''),
             'timestamp': params['timestamp'],
         }
-        logger.debug('HAR: request will be sent: %s %s', request_id, request_data.get('url', ''))
+        loguru_logger.debug('HAR: request will be sent: %s %s', request_id, request_data.get('url', ''))
 
     def _on_request_extra_info(self, event: RequestWillBeSentExtraInfoEvent) -> None:
         """处理 Network.requestWillBeSentExtraInfo 事件。"""
@@ -168,7 +168,7 @@ class HarRecorder:
         extra_headers = params.get('headers', {})
         if extra_headers:
             pending['request_headers_extra'] = extra_headers
-        logger.debug('HAR: request extra info: %s', request_id)
+        loguru_logger.debug('HAR: request extra info: %s', request_id)
 
     def _on_response_received(self, event: ResponseReceivedEvent) -> None:
         """处理 Network.responseReceived 事件。"""
@@ -189,7 +189,7 @@ class HarRecorder:
         pending['connection_id'] = str(response.get('connectionId', ''))
         pending['encoded_data_length'] = response.get('encodedDataLength', 0)
         pending['response_timestamp'] = params['timestamp']
-        logger.debug('HAR: response received: %s status=%s', request_id, response['status'])
+        loguru_logger.debug('HAR: response received: %s status=%s', request_id, response['status'])
 
     def _on_response_extra_info(self, event: ResponseReceivedExtraInfoEvent) -> None:
         """处理 Network.responseReceivedExtraInfo 事件。"""
@@ -205,7 +205,7 @@ class HarRecorder:
         status_code = params.get('statusCode')
         if status_code is not None:
             pending['extra_status_code'] = status_code
-        logger.debug('HAR: response extra info: %s', request_id)
+        loguru_logger.debug('HAR: response extra info: %s', request_id)
 
     def _on_data_received(self, event: DataReceivedEvent) -> None:
         """处理 Network.dataReceived 事件。
@@ -235,7 +235,7 @@ class HarRecorder:
         task.add_done_callback(
             lambda t: self._body_tasks.remove(t) if t in self._body_tasks else None
         )
-        logger.debug('HAR: loading finished: %s', request_id)
+        loguru_logger.debug('HAR: loading finished: %s', request_id)
 
     def _on_loading_failed(self, event: LoadingFailedEvent) -> None:
         """处理 Network.loadingFailed 事件。"""
@@ -253,7 +253,7 @@ class HarRecorder:
 
         entry = self._build_entry(pending)
         self._entries.append(entry)
-        logger.debug('HAR: loading failed: %s error=%s', request_id, params.get('errorText'))
+        loguru_logger.debug('HAR: loading failed: %s error=%s', request_id, params.get('errorText'))
 
     async def _finalize_entry(self, request_id: str) -> None:
         """获取响应主体并构建最终的 HAR 条目。"""
@@ -284,7 +284,7 @@ class HarRecorder:
 
         entry = self._build_entry(pending)
         self._entries.append(entry)
-        logger.debug(
+        loguru_logger.debug(
             'HAR: redirect finalized: %s → %s', request_id, redirect_response.get('status')
         )
 
@@ -296,7 +296,7 @@ class HarRecorder:
             pending.setdefault('status_text', '(pending)')
             entry = self._build_entry(pending)
             self._entries.append(entry)
-        logger.debug('HAR: flushed pending entries')
+        loguru_logger.debug('HAR: flushed pending entries')
 
     async def _fetch_response_body(self, request_id: str) -> tuple[str, bool]:
         """通过 Network.getResponseBody 获取响应正文。
@@ -309,7 +309,7 @@ class HarRecorder:
             body_result = response['result']
             return body_result['body'], body_result['base64Encoded']
         except Exception:
-            logger.debug('HAR: failed to fetch response body for %s', request_id)
+            loguru_logger.debug('HAR: failed to fetch response body for %s', request_id)
             return '', False
 
     def _build_entry(self, pending: dict[str, Any]) -> HarEntry:
@@ -625,4 +625,4 @@ class HarCapture:
         file_path.parent.mkdir(parents=True, exist_ok=True)
         with open(file_path, 'w', encoding='utf-8') as f:
             json.dump(har_dict, f, indent=2, ensure_ascii=False)
-        logger.info('HAR recording saved to %s (%d entries)', path, len(self._recorder._entries))
+        loguru_logger.info('HAR recording saved to %s (%d entries)', path, len(self._recorder._entries))

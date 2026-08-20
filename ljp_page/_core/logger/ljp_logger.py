@@ -1,118 +1,64 @@
 ﻿from __future__ import annotations
 import sys
-from datetime import datetime
-from pathlib import Path
 from threading import RLock
-from typing import Iterable, Dict, Any, cast, Callable
+
 
 from loguru import logger as loguru_logger
-
-_loguru_filter_type = str | Callable[[dict[str, object]], bool] | None
-_loguru_formatter_type = str | Callable[[dict[str, Any]], str]
-from dataclasses import dataclass, field
-from typing import Any, Iterable, Mapping
-
-DEFAULT_LEVEL_NAMES: dict[int, str] = {
-    1: "debug",
-    2: "trace",
-    3: "verbose",
-    4: "notice",
-    5: "info",
-    6: "print",
-    7: "event",
-    8: "check",
-    9: "risk",
-    10: "warning",
-    11: "warn_plus",
-    12: "alert",
-    13: "issue",
-    14: "error_minor",
-    15: "error",
-    16: "fatal",
-    17: "panic",
-    18: "security",
-    19: "critical",
-    20: "off",
-}
-
-DEFAULT_LEVEL_ALIASES: dict[str, int] = {
-    value:name
-    for name, value in DEFAULT_LEVEL_NAMES.items()
-}
 from ljp_page._core.model import LogConfig
 
-class Logger:
-    """基于 loguru 实现的支持 1-20 数字级别与别名映射的日志器。"""
 
+
+class Logger:
     def __init__(self, config: LogConfig | None = None):
-        super().__init__()
         self._lock = RLock()
         self.config = config if config else LogConfig()
-
-        # 1. 初始化级别映射和别名
-        self.level_names: Dict[int, str] = dict(DEFAULT_LEVEL_NAMES)
-        if self.config.level_names:
-            self.level_names.update({int(k): str(v) for k, v in self.config.level_names.items()})
-
-        self.aliases: Dict[str, int] = dict(DEFAULT_LEVEL_ALIASES)
-        if self.config.aliases:
-            self.aliases.update({str(k).lower(): int(v) for k, v in self.config.aliases.items()})
-
-        # 2. 处理默认级别和启用级别
-        self.default_level = self._normalize_level(self.config.default_level, fallback=5)
-        self.enabled_levels: set[int] = set()
-        self._update_enabled_levels(self.config.enabled_levels)
-
-        # 3. 处理输出路径
-        self.log_file_path = self._resolve_log_file_path(self.config.log_file_path)
-
-        # 4. 初始化 loguru：先移除默认 handler
         loguru_logger.remove()
+        self.logger = loguru_logger.bind(service='ljp_logger')
+        self.logger.remove()
 
-        # 5. 注册所有自定义级别到 loguru
-        self._register_all_levels_to_loguru()
 
-        # 6. 根据配置添加 handler
+        self._zc_level()
+
         self._setup_handlers()
 
-        self.logger = loguru_logger
+    def _setup_handlers(self) -> None:
+        with self._lock:
+            self.logger.remove()
+            if self.config.output_console:self.logger.add(
+            sys.stdout,
+            filter=self.level_filter,
+            format=self.my_formatter,
+            level=self.config.default_level,
+            colorize=True,
+            backtrace=False,  # 不打印内部错误堆栈
+            diagnose=False,  # 不解析内部错误
+        )
 
-    @staticmethod
-    def _resolve_log_file_path(log_file_path: str | None) -> Path:
-        """解析日志文件路径，默认在当前脚本目录下生成 log.log"""
-        if log_file_path:
-            return Path(log_file_path)
-        current_dir = Path(sys.argv[0]).resolve().parent
-        return current_dir / "log.log"
+            if self.config.output_file:
+                self.logger.add(
+                    self.config.log_file_path / "app_{time:YYYY-MM-DD}.log",
+                    level=0,
+                    format=self.my_formatter,
+                    filter=self.level_filter,
+                    rotation="1 day",  # 每天轮转
+                    retention="7 days",  # 保留7天
+                    encoding="utf-8"
 
-    def _normalize_level(self, level: int | str, fallback: int = 5) -> int:
-        """将级别（数字或别名）标准化为 1-20 的整数"""
-        if isinstance(level, int):
-            return min(20, max(1, level))
-        level_key = str(level).strip().lower()
-        return min(20, max(1, self.aliases.get(level_key, fallback)))
+                )
 
-    def _update_enabled_levels(self, levels: Iterable[int | str] | None) -> None:
-        """更新启用的日志级别集合"""
-        if levels is None:
-            self.enabled_levels = set(range(1, 20))
-        else:
-            self.enabled_levels = {
-                self._normalize_level(level, fallback=5) for level in levels
-            }
-
-    def _register_all_levels_to_loguru(self) -> None:
-        """将所有自定义级别注册到 loguru（全局生效）"""
-        for level_num, level_name in self.level_names.items():
+    def _zc_level(self):
+        for no, name in self.config.level_map.items():
             try:
-                loguru_logger.level(level_name)
+                self.logger.level(name, color=self._get_level_color(no))
             except ValueError:
-                # 不存在才创建
                 try:
-                    loguru_logger.level(level_name, no=level_num, color=self._get_level_color(level_num))
+                    self.logger.level(name, no=no, color=self._get_level_color(no))
                 except (ValueError, TypeError):
                     # 双重保险
                     pass
+
+    def level_filter(self,record):
+        return record["level"].no in self.config.enabled_levels
 
     @staticmethod
     def _get_level_color(level_num: int) -> str:
@@ -127,130 +73,61 @@ class Logger:
         else:
             return "<bold><red>"
 
-    def _loguru_filter(self, record: Dict[str, Any]) -> bool:
-        """loguru 过滤器：控制哪些级别的日志输出"""
+    @staticmethod
+    def my_formatter(record):
+        # 1. 时间用原生更快（但这里为了演示）
+        time_str = record["time"].strftime("%Y-%m-%d %H:%M:%S")
         level_num = record["level"].no
-        if level_num == 20:
-            return False
-        return level_num in self.enabled_levels
-
-    def _loguru_formatter(self, record: Dict[str, Any]) -> str:
-        """loguru 格式化器：匹配原有的日志输出格式"""
-        now_str = datetime.fromtimestamp(record["time"].timestamp()).strftime("%Y-%m-%d %H:%M:%S")
-        level_num = record["level"].no
-        level_name = self.level_names.get(level_num, f"L{level_num}")
+        level_name = record["level"].name  # 直接用原生名字
         message = record["message"]
         extra = record.get("extra", {})
+        extra = {k: v for k, v in extra.items() if k != "service"}
 
         ctx_str = ""
         if extra:
-            ctx_str = " | " + " ".join(f"{k}={v}" for k, v in extra.items())
+            # ✅ 转义花括号：将 { 替换为 {{，} 替换为 }}
+            escaped_parts = []
+            for k, v in extra.items():
+                v_str = str(v).replace('{', '{{').replace('}', '}}')
+                escaped_parts.append(f"{k}={v_str}")
+            ctx_str = " | " + " ".join(escaped_parts)
 
-        return (
-            "<level>{time}</level> | "
-            "<level>L{level_num:02d}({level_name})</level> | "
-            "<level>{message}</level>{ctx}\n"
-        ).format(
-            time=now_str,
-            level_num=level_num,
-            level_name=level_name,
-            message=message,
-            ctx=ctx_str
+
+        return_str =  (
+            f"<level>{time_str} | L{level_num:02d}({level_name}) | {message}{ctx_str}</level>\n"
         )
 
-    def _setup_handlers(self) -> None:
-        """（重新）设置 loguru 的 handler（控制台 + 文件）"""
-        with self._lock:
-            # 先移除所有现有 handler
-            loguru_logger.remove()
+        return return_str
 
-            # 添加控制台 handler
-            if self.config.output_console:
-                loguru_logger.add(
-                    sys.stdout,
-                    filter=cast(_loguru_filter_type, self._loguru_filter),
-                    format=cast(_loguru_formatter_type, self._loguru_formatter),
-                    level=self.default_level,
-                    colorize=True,
-                    backtrace=False,  # 不打印内部错误堆栈
-                    diagnose=False,  # 不解析内部错误
-                )
+    def use_debug(self):
+        self.config.output_console = True
+        self.config.output_file = True
+        self.config.default_level = 1
+        self.config.enabled_levels = set(range(1, 20))  # 启用所有自定义级别
+        self._setup_handlers()  # 重新加载 Handler
 
-            # 添加文件 handler
-            if self.config.output_file:
-                self.log_file_path.parent.mkdir(parents=True, exist_ok=True)
-                loguru_logger.add(
-                    str(self.log_file_path),
-                    filter=cast(_loguru_filter_type, self._loguru_filter),
-                    format=cast(_loguru_formatter_type, self._loguru_formatter),
-                    level=self.default_level,
-                    encoding="utf-8"
-                )
 
-    def set_enabled_levels(self, levels: Iterable[int | str]) -> None:
-        """动态设置启用的日志级别"""
-        with self._lock:
-            self._update_enabled_levels(levels)
-            self._setup_handlers()
+    def __getattr__(self, name):
+        """当访问的属性不存在时，尝试从 _logger 上找"""
+        return getattr(self.logger, name)
 
-    def set_default_level(self, level: int | str) -> None:
-        """动态设置默认日志级别"""
-        with self._lock:
-            self.default_level = self._normalize_level(level, fallback=5)
-            self._setup_handlers()
+    def info(self, message: str, **kwargs):
+        """使用自定义级别 info（编号 5）"""
+        self.logger.log("info", message, **kwargs)
 
-    def register_level(self, level: int, name: str, alias: str | None = None) -> None:
-        """动态注册新的日志级别"""
-        safe_level = self._normalize_level(level, fallback=5)
-        with self._lock:
-            # 更新本地映射
-            self.level_names[safe_level] = name
-            if alias:
-                self.aliases[alias.lower()] = safe_level
-            # 注册到 loguru
-            try:
-                loguru_logger.level(name, no=safe_level)
-            except TypeError:
-                pass
-            # 重新应用 handler
-            self._setup_handlers()
+    def debug(self, message: str, **kwargs):
+        """使用自定义级别 debug（编号 1）"""
+        self.logger.log("debug", message, **kwargs)
 
-    @staticmethod
-    def bind(**kwargs):
-        return loguru_logger.bind(**kwargs)
+    def warning(self, message: str, **kwargs):
+        self.logger.log("warning", message, **kwargs)
 
-    def set_debug(self):
-        self.set_default_level(DEFAULT_LEVEL_ALIASES['debug'])
+    def error(self, message: str, **kwargs):
+        self.logger.log("error", message, **kwargs)
 
-    def log(self, level: int | str, message: str,f_name="") -> None:
-        """通用日志输出方法"""
-        normalized_level = self._normalize_level(level)
-        level_name = self.level_names.get(normalized_level, f"L{normalized_level}")
-        message = f"[{f_name}] {message}" if f_name else str(message)
-        try:
-            loguru_logger.log(level_name, message)
-        except Exception as _:
-            import traceback
-            print(traceback.format_exc())
-
-    def debug(self, message: str,f_name='') -> None:
-        self.log(DEFAULT_LEVEL_ALIASES['debug'], message,f_name)
-
-    def info(self, message: str,f_name="") -> None:
-        self.log(DEFAULT_LEVEL_ALIASES['info'], message,f_name)
-
-    def print(self,message,f_name="") -> None:
-        self.log(DEFAULT_LEVEL_ALIASES['print'], message,f_name)
-
-    def warning(self, message: str,f_name="") -> None:
-        self.log(DEFAULT_LEVEL_ALIASES['warning'], message,f_name)
-
-    def error(self, message: str,f_name="") -> None:
-        self.log(DEFAULT_LEVEL_ALIASES['error'], message,f_name)
-
-    def critical(self, message: str,f_name="") -> None:
-        self.log(DEFAULT_LEVEL_ALIASES['critical'], message,f_name)
+    def critical(self, message: str, **kwargs):
+        self.logger.log("critical", message, **kwargs)
 
 logger = Logger()
 
-__all__ = ["Logger",'logger','DEFAULT_LEVEL_ALIASES','DEFAULT_LEVEL_NAMES','LogConfig']
+__all__ = ["Logger", 'logger', 'LogConfig']

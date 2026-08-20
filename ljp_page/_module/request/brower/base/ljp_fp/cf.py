@@ -1,7 +1,7 @@
 import asyncio
 import contextlib
 from typing import Optional, TYPE_CHECKING
-from ljp_page.logger import logger
+from ljp_page.logger import loguru_logger
 from ljp_page._module.request.brower.base.protocol.base import T_CommandResponse, Command, T_CommandParams
 from ljp_page._module.request.brower.base.connection import ConnectionHandler
 from ljp_page._module.request.brower.base.elements.web_element import WebElement
@@ -67,14 +67,14 @@ class _ts(FindElementsMixin):
                     return
             except Exception as exc:
                 last_error = exc
-                logger.debug(f'Cloudflare bypass attempt failed, retrying: {exc}')
+                loguru_logger.debug(f'Cloudflare bypass attempt failed, retrying: {exc}')
 
             if loop.time() >= deadline:
                 break
             await asyncio.sleep(0.5)
 
         if last_error is not None:
-            logger.error(f'Error in cloudflare bypass: {last_error}')
+            loguru_logger.error(f'Error in cloudflare bypass: {last_error}')
 
     async def _find_cloudflare_shadow_root(self) -> Optional[ShadowRoot]:
         """Return the Cloudflare Turnstile shadow root if currently present.
@@ -134,7 +134,7 @@ class _ts(FindElementsMixin):
             WaitElementTimeout: If timeout > 0 and no shadow roots are found
                 within the specified duration.
         """
-        logger.debug('Finding all shadow roots in page (timeout=%s)', timeout)
+        loguru_logger.debug('Finding all shadow roots in page (timeout=%s)', timeout)
 
         if not timeout:
             return await self._collect_all_shadow_roots(deep)
@@ -174,13 +174,13 @@ class _ts(FindElementsMixin):
                 )
                 shadow_object_id = resolve_response['result']['object']['objectId']
             except (CommandExecutionTimeout, WebSocketConnectionClosed, KeyError):
-                logger.debug(f'Failed to resolve shadow root: backend_node_id={backend_node_id}')
+                loguru_logger.debug(f'Failed to resolve shadow root: backend_node_id={backend_node_id}')
                 continue
 
             try:
                 host_element = await self._resolve_shadow_host(host_backend_id)
             except (CommandExecutionTimeout, WebSocketConnectionClosed, KeyError):
-                logger.debug(f'Failed to resolve shadow host: backend_node_id={host_backend_id}')
+                loguru_logger.debug(f'Failed to resolve shadow host: backend_node_id={host_backend_id}')
                 host_element = None
             mode = ShadowRootType(shadow_data.get('shadowRootType', 'open'))
             shadow_roots.append(
@@ -196,7 +196,7 @@ class _ts(FindElementsMixin):
             oopif_roots = await self._collect_oopif_shadow_roots()
             shadow_roots.extend(oopif_roots)
 
-        logger.debug(f'Found {len(shadow_roots)} shadow roots')
+        loguru_logger.debug(f'Found {len(shadow_roots)} shadow roots')
         return shadow_roots
 
     @staticmethod
@@ -239,7 +239,7 @@ class _ts(FindElementsMixin):
         iframe_targets = [t for t in target_infos if t.get('type') == 'iframe']
 
         if not iframe_targets:
-            logger.debug('No OOPIF targets found')
+            loguru_logger.debug('No OOPIF targets found')
             return []
 
         shadow_roots: list[ShadowRoot] = []
@@ -247,7 +247,7 @@ class _ts(FindElementsMixin):
             roots = await self._collect_shadow_roots_from_oopif_target(target, browser_handler)
             shadow_roots.extend(roots)
 
-        logger.debug(f'Found {len(shadow_roots)} shadow roots in OOPIFs')
+        loguru_logger.debug(f'Found {len(shadow_roots)} shadow roots in OOPIFs')
         return shadow_roots
 
     async def _collect_shadow_roots_from_oopif_target(
@@ -265,7 +265,7 @@ class _ts(FindElementsMixin):
             if not session_id:
                 return []
         except (CommandExecutionTimeout, WebSocketConnectionClosed):
-            logger.debug(f'Failed to attach to OOPIF target: {target_id}')
+            loguru_logger.debug(f'Failed to attach to OOPIF target: {target_id}')
             return []
 
         try:
@@ -276,7 +276,7 @@ class _ts(FindElementsMixin):
             )
             root_node = doc_response.get('result', {}).get('root', {})
         except (CommandExecutionTimeout, WebSocketConnectionClosed):
-            logger.debug(f'Failed to get document from OOPIF target: {target_id}')
+            loguru_logger.debug(f'Failed to get document from OOPIF target: {target_id}')
             return []
 
         entries: list[tuple[Node, int | None]] = []
@@ -318,7 +318,7 @@ class _ts(FindElementsMixin):
             )
             shadow_object_id = resolve_response['result']['object']['objectId']
         except (CommandExecutionTimeout, WebSocketConnectionClosed, KeyError):
-            logger.debug(f'Failed to resolve OOPIF shadow root: backend_node_id={backend_node_id}')
+            loguru_logger.debug(f'Failed to resolve OOPIF shadow root: backend_node_id={backend_node_id}')
             return None
 
         host_element = await self._resolve_oopif_shadow_host(
@@ -376,7 +376,7 @@ class _ts(FindElementsMixin):
                 mouse=self._mouse,
             )
         except (CommandExecutionTimeout, WebSocketConnectionClosed, KeyError):
-            logger.debug(f'Failed to resolve OOPIF shadow host: backend_node_id={host_backend_id}')
+            loguru_logger.debug(f'Failed to resolve OOPIF shadow host: backend_node_id={host_backend_id}')
             return None
 
 

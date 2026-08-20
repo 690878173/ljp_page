@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from fetch.types import HeaderEntry
     from network.types import CookieParam
 
-from ljp_page.logger import logger
+from ljp_page.logger import loguru_logger
 
 STATUS_CODE_RANGE_OK = range(200, 400)
 
@@ -190,7 +190,7 @@ class Response:
             self._json = jsonlib.loads(self.text)
             return self._json
         except jsonlib.JSONDecodeError as exc:
-            logger.debug('Failed to decode response as JSON')
+            loguru_logger.debug('Failed to decode response as JSON')
             raise ValueError('Response is not valid JSON') from exc
 
     def raise_for_status(self) -> None:
@@ -207,7 +207,7 @@ class Response:
             此方法与 requests.Response.raise_for_status() 兼容
             以便从请求库轻松迁移。"""
         if self.status_code not in STATUS_CODE_RANGE_OK:
-            logger.error(
+            loguru_logger.error(
                 f'HTTP error status encountered: status={self.status_code}, url={self._url}'
             )
             raise HTTPError(f'{self.status_code} Client Error: for url {self._url}')

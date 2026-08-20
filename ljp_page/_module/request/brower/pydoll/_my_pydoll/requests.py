@@ -18,7 +18,7 @@ from network.events import (
 )
 from network.types import CookieParam
 
-from ljp_page.logger import logger
+from ljp_page.logger import loguru_logger
 
 RequestReceivedEvent = Union[
     ResponseReceivedEvent,
@@ -118,7 +118,7 @@ class Request(_Request):
             return self._build_response(result, received_headers, sent_headers, cookies)
 
         except Exception as exc:
-            logger.error(f'Request failed: {exc}')
+            loguru_logger.error(f'Request failed: {exc}')
             raise HTTPError(f': {str(exc)}') from exc
 
         finally:
@@ -133,7 +133,7 @@ class Request(_Request):
     ) -> Response:
         """从获取结果构建 Response 对象。"""
         result_value = result['result']['result']['value']
-        logger.debug(f'Building response: result_value={result_value}')
+        loguru_logger.debug(f'Building response: result_value={result_value}')
         if 'error' in result_value:
             return Response(
                 status_code = 777,

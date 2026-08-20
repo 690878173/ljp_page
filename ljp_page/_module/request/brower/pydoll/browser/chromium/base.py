@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from ljp_page.logger import logger
+from ljp_page.logger import loguru_logger
 import os
 import shutil
 from abc import ABC, abstractmethod
@@ -105,21 +105,21 @@ class Browser(ABC):  #编号：PLR0904
         self._backup_preferences_dir = ''
         self._tabs_opened: dict[str, Tab] = {}
         self._context_proxy_auth: dict[str, tuple[str, str]] = {}
-        logger.debug(
+        loguru_logger.debug(
             f'Browser initialized: port={self._connection_port}, '
             f'headless={getattr(self.options, "headless", None)}'
         )
 
     async def __aenter__(self) -> 'Browser':
         """异步上下文管理器条目。"""
-        logger.debug('Entering browser async context')
+        loguru_logger.debug('Entering browser async context')
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """异步上下文管理器退出并进行清理。"""
-        logger.debug(f'异步上下文管理器退出并进行清理: exc_type={exc_type}')
+        loguru_logger.debug(f'异步上下文管理器退出并进行清理: exc_type={exc_type}')
         if self._backup_preferences_dir:
-            logger.debug(f'Restoring backup preferences directory: {self._backup_preferences_dir}')
+            loguru_logger.debug(f'Restoring backup preferences directory: {self._backup_preferences_dir}')
             user_data_dir = self._get_user_data_dir()
             shutil.copy2(
                 self._backup_preferences_dir,
@@ -144,10 +144,10 @@ class Browser(ABC):  #编号：PLR0904
         注意：
             仅当您想连接到浏览器时才应该使用此方法
             已经在运行了。"""
-        logger.info(f'Connecting to browser via WebSocket: {ws_address}')
+        loguru_logger.info(f'Connecting to browser via WebSocket: {ws_address}')
         await self._setup_ws_address(ws_address)
         tabs = await self.get_opened_tabs()
-        logger.info(f'Connected. Tabs available: {len(tabs)}')
+        loguru_logger.info(f'Connected. Tabs available: {len(tabs)}')
         return tabs[0]
 
     async def start(self) -> Tab:
@@ -161,25 +161,25 @@ class Browser(ABC):  #编号：PLR0904
 
 
         binary_location = self.options.binary_location or self._get_default_binary_location()
-        logger.debug('Resolved binary location: %s', binary_location)
+        loguru_logger.debug('Resolved binary location: %s', binary_location)
 
         self._setup_user_dir()
-        logger.debug('User data directory configured')
+        loguru_logger.debug('User data directory configured')
         proxy_config = self._proxy_manager.get_proxy_credentials()
 
-        logger.debug(f'浏览器进程:{self._connection_port}')
+        loguru_logger.debug(f'浏览器进程:{self._connection_port}')
         self._browser_process_manager.start_browser_process(
             binary_location, self._connection_port, self.options.arguments
         )
         await self._verify_browser_running()
-        logger.debug('Browser process started and responsive')
+        loguru_logger.debug('Browser process started and responsive')
         await self._configure_proxy(proxy_config[0], proxy_config[1])
 
         valid_tab_id = await self._get_valid_tab_id(await self.get_targets())
         tab = Tab(self, target_id=valid_tab_id, connection_port=self._connection_port)
         self._tabs_opened[valid_tab_id] = tab
         await self._apply_user_agent_override(tab)
-        logger.debug(f'Initial tab attached: {valid_tab_id}')
+        loguru_logger.debug(f'Initial tab attached: {valid_tab_id}')
         return tab
 
     async def stop(self):
@@ -191,20 +191,20 @@ class Browser(ABC):  #编号：PLR0904
         加薪：
             BrowserNotRunning：如果浏览器当前未运行。"""
         if not await self._is_browser_running():
-            logger.error('Stop called but browser is not running')
+            loguru_logger.error('Stop called but browser is not running')
             raise BrowserNotRunning()
 
-        logger.debug('停止浏览器进程')
+        loguru_logger.debug('停止浏览器进程')
         await self._execute_command(BrowserCommands.close())
         self._browser_process_manager.stop_process()
         await self._connection_handler.close()
         await asyncio.sleep(0.5 if os.name == 'nt' else 0.1)
         self._temp_directory_manager.cleanup()
-        logger.info('停止浏览器进程')
+        loguru_logger.info('停止浏览器进程')
 
     async def close(self):
         """关闭WebSocket连接并释放资源。"""
-        logger.debug('关闭WebSocket连接并释放资源。')
+        loguru_logger.debug('关闭WebSocket连接并释放资源。')
         await self._connection_handler.close()
 
     async def create_browser_context(
@@ -226,7 +226,7 @@ class Browser(ABC):  #编号：PLR0904
         extracted_auth: Optional[tuple[str, str]] = None
         if proxy_server:
             sanitized_proxy, extracted_auth = self._sanitize_proxy_and_extract_auth(proxy_server)
-            logger.debug(
+            loguru_logger.debug(
                 f'Creating browser context with proxy: {sanitized_proxy}'
                 f'(credentials provided={bool(extracted_auth)})'
             )
@@ -240,7 +240,7 @@ class Browser(ABC):  #编号：PLR0904
         context_id = response['result']['browserContextId']
         if extracted_auth:
             self._context_proxy_auth[context_id] = extracted_auth
-        logger.info(f'Created browser context: {context_id}')
+        loguru_logger.info(f'Created browser context: {context_id}')
         return context_id
 
     async def delete_browser_context(self, browser_context_id: str):
@@ -251,7 +251,7 @@ class Browser(ABC):  #编号：PLR0904
 
         注意：
             立即关闭所有关联的选项卡。"""
-        logger.info(f'Deleting browser context: {browser_context_id}')
+        loguru_logger.info(f'Deleting browser context: {browser_context_id}')
         return await self._execute_command(
             TargetCommands.dispose_browser_context(browser_context_id)
         )
@@ -261,7 +261,7 @@ class Browser(ABC):  #编号：PLR0904
         response: GetBrowserContextsResponse = await self._execute_command(
             TargetCommands.get_browser_contexts()
         )
-        logger.debug(f'Fetched {len(response["result"]["browserContextIds"])} browser contexts')
+        loguru_logger.debug(f'Fetched {len(response["result"]["browserContextIds"])} browser contexts')
         return response['result']['browserContextIds']
 
     async def new_tab(self, url: str = '', browser_context_id: Optional[str] = None) -> Tab:
@@ -273,7 +273,7 @@ class Browser(ABC):  #编号：PLR0904
 
         返回：
             用于页面导航和元素交互的选项卡实例。"""
-        logger.info(f'Creating new tab (context={browser_context_id})')
+        loguru_logger.info(f'Creating new tab (context={browser_context_id})')
         response: CreateTargetResponse = await self._execute_command(
             TargetCommands.create_target(
                 browser_context_id=browser_context_id,
@@ -286,7 +286,7 @@ class Browser(ABC):  #编号：PLR0904
         await self._setup_context_proxy_auth_for_tab(tab, browser_context_id)
         if url:
             await tab.go_to(url)
-        logger.info(f'New tab created: {target_id}')
+        loguru_logger.info(f'New tab created: {target_id}')
         return tab
 
     async def get_targets(self) -> list[TargetInfo]:
@@ -298,7 +298,7 @@ class Browser(ABC):  #编号：PLR0904
         返回：
             TargetInfo 对象的列表。"""
         response: GetTargetsResponse = await self._execute_command(TargetCommands.get_targets())
-        logger.debug(f'Fetched {len(response["result"]["targetInfos"])} targets')
+        loguru_logger.debug(f'Fetched {len(response["result"]["targetInfos"])} targets')
         return response['result']['targetInfos']
 
     async def get_opened_tabs(self) -> list[Tab]:
@@ -326,7 +326,7 @@ class Browser(ABC):  #编号：PLR0904
             await self._apply_user_agent_override(tab)
             new_tabs.append(tab)
         self._tabs_opened.update(dict(zip(remaining_target_ids, new_tabs)))
-        logger.debug(
+        loguru_logger.debug(
             f'Opened tabs resolved: existing={len(existing_tabs)}, new={len(new_tabs)}',
         )
         return existing_tabs + new_tabs
@@ -338,7 +338,7 @@ class Browser(ABC):  #编号：PLR0904
 
     async def set_download_path(self, path: str, browser_context_id: Optional[str] = None):
         """设置下载目录路径（set_download_behavior 的便捷方法）。"""
-        logger.info(f'Setting download path: {path} (context={browser_context_id})')
+        loguru_logger.info(f'Setting download path: {path} (context={browser_context_id})')
         return await self._execute_command(
             BrowserCommands.set_download_behavior(
                 behavior=DownloadBehavior.ALLOW,
@@ -361,7 +361,7 @@ class Browser(ABC):  #编号：PLR0904
             download_path：如果行为允许，则需要。
             browser_context_id：要应用的上下文（默认为“无”）。
             events_enabled：生成下载事件以进行进度跟踪。"""
-        logger.info(
+        loguru_logger.info(
             f'Setting download behavior: behavior={behavior},'
             f'path={download_path}, context={browser_context_id},'
             f'events={events_enabled}'
@@ -377,14 +377,14 @@ class Browser(ABC):  #编号：PLR0904
 
     async def delete_all_cookies(self, browser_context_id: Optional[str] = None):
         """从浏览器或上下文中删除所有 cookie（会话、持久、第三方）。"""
-        logger.info(f'Clearing all cookies (context={browser_context_id})')
+        loguru_logger.info(f'Clearing all cookies (context={browser_context_id})')
         return await self._execute_command(StorageCommands.clear_cookies(browser_context_id))
 
     async def set_cookies(
         self, cookies: list[CookieParam], browser_context_id: Optional[str] = None
     ):
         """在浏览器或上下文中设置多个 cookie。"""
-        logger.debug(f'Setting {len(cookies)} cookies (context={browser_context_id})')
+        loguru_logger.debug(f'Setting {len(cookies)} cookies (context={browser_context_id})')
         return await self._execute_command(StorageCommands.set_cookies(cookies, browser_context_id))
 
     async def get_cookies(self, browser_context_id: Optional[str] = None) -> list[Cookie]:
@@ -396,7 +396,7 @@ class Browser(ABC):  #编号：PLR0904
         response: GetCookiesResponse = await self._execute_command(
             StorageCommands.get_cookies(browser_context_id)
         )
-        logger.debug(
+        loguru_logger.debug(
             f'Retrieved {len(response["result"]["cookies"])} cookies (context={browser_context_id})'
         )
         return response['result']['cookies']
@@ -404,7 +404,7 @@ class Browser(ABC):  #编号：PLR0904
     async def get_version(self) -> GetVersionResult:
         """获取浏览器版本和 CDP 协议信息。"""
         response: GetVersionResponse = await self._execute_command(BrowserCommands.get_version())
-        logger.debug(f'Browser version: {response["result"]}')
+        loguru_logger.debug(f'Browser version: {response["result"]}')
         return response['result']
 
     async def get_window_id_for_target(self, target_id: str) -> int:
@@ -412,14 +412,14 @@ class Browser(ABC):  #编号：PLR0904
         response: GetWindowForTargetResponse = await self._execute_command(
             BrowserCommands.get_window_for_target(target_id)
         )
-        logger.debug(f'Window id for target {target_id}: {response["result"]["windowId"]}')
+        loguru_logger.debug(f'Window id for target {target_id}: {response["result"]["windowId"]}')
         return response['result']['windowId']
 
     async def get_window_id_for_tab(self, tab: Tab) -> int:
         """获取选项卡的窗口 ID（便捷方法）。"""
         target_id = tab._target_id or (tab._ws_address.split('/')[-1] if tab._ws_address else None)
         if not target_id:
-            logger.error('Missing target id or ws address for tab when getting window id')
+            loguru_logger.error('Missing target id or ws address for tab when getting window id')
             raise MissingTargetOrWebSocket()
         return await self.get_window_id_for_target(target_id)
 
@@ -435,13 +435,13 @@ class Browser(ABC):  #编号：PLR0904
     async def set_window_maximized(self):
         """最大化浏览器窗口（影响窗口中的所有选项卡）。"""
         window_id = await self.get_window_id()
-        logger.info(f'Maximizing window: id={window_id}')
+        loguru_logger.info(f'Maximizing window: id={window_id}')
         return await self._execute_command(BrowserCommands.set_window_maximized(window_id))
 
     async def set_window_minimized(self):
         """将浏览器窗口最小化到任务栏/停靠栏。"""
         window_id = await self.get_window_id()
-        logger.info(f'Minimizing window: id={window_id}')
+        loguru_logger.info(f'Minimizing window: id={window_id}')
         return await self._execute_command(BrowserCommands.set_window_minimized(window_id))
 
     async def set_window_bounds(self, bounds: Bounds):
@@ -451,7 +451,7 @@ class Browser(ABC):  #编号：PLR0904
             bounds：要修改的属性（左、上、宽度、高度、windowState）。
                 仅更改指定的属性。"""
         window_id = await self.get_window_id()
-        logger.info(f'Setting window bounds: id={window_id}, bounds={bounds}')
+        loguru_logger.info(f'Setting window bounds: id={window_id}, bounds={bounds}')
         return await self._execute_command(BrowserCommands.set_window_bounds(window_id, bounds))
 
     async def grant_permissions(
@@ -468,7 +468,7 @@ class Browser(ABC):  #编号：PLR0904
             权限：授予的权限。
             origin：要授予的源（如果没有，则为所有源）。
             browser_context_id：要应用的上下文（默认为“无”）。"""
-        logger.info(
+        loguru_logger.info(
             f'Granting permissions: {permissions} (origin={origin}, context={browser_context_id})',
         )
         return await self._execute_command(
@@ -477,7 +477,7 @@ class Browser(ABC):  #编号：PLR0904
 
     async def reset_permissions(self, browser_context_id: Optional[str] = None):
         """将所有权限重置为默认值并恢复提示行为。"""
-        logger.info(f'Resetting permissions (context={browser_context_id})')
+        loguru_logger.info(f'Resetting permissions (context={browser_context_id})')
         return await self._execute_command(BrowserCommands.reset_permissions(browser_context_id))
 
     @overload
@@ -511,7 +511,7 @@ class Browser(ABC):  #编号：PLR0904
             function_to_register = callback_wrapper
         else:
             function_to_register = callback
-        logger.debug(
+        loguru_logger.debug(
             f'Registering callback: event={event_name}, temporary={temporary}, '
             f'async={asyncio.iscoroutinefunction(callback)}'
         )
@@ -521,7 +521,7 @@ class Browser(ABC):  #编号：PLR0904
 
     async def remove_callback(self, callback_id: int):
         """从浏览器中删除回调。"""
-        logger.debug(f'Removing callback: id={callback_id}')
+        loguru_logger.debug(f'Removing callback: id={callback_id}')
         return await self._connection_handler.remove_callback(callback_id)
 
     async def enable_fetch_events(
@@ -540,7 +540,7 @@ class Browser(ABC):  #编号：PLR0904
 
         注意：
             暂停的请求必须继续，否则将超时。"""
-        logger.debug(
+        loguru_logger.debug(
             f'Enabling Fetch events: handle_auth={handle_auth_requests}, '
             f'resource_type={resource_type}'
         )
@@ -553,17 +553,17 @@ class Browser(ABC):  #编号：PLR0904
 
     async def disable_fetch_events(self):
         """禁用请求拦截并释放任何暂停的请求。"""
-        logger.debug('Disabling Fetch events')
+        loguru_logger.debug('Disabling Fetch events')
         return await self._connection_handler.execute_command(FetchCommands.disable())
 
     async def enable_runtime_events(self):
         """启用运行时事件。"""
-        logger.debug('Enabling Runtime events')
+        loguru_logger.debug('Enabling Runtime events')
         return await self._connection_handler.execute_command(RuntimeCommands.enable())
 
     async def disable_runtime_events(self):
         """禁用运行时事件。"""
-        logger.debug('Disabling Runtime events')
+        loguru_logger.debug('Disabling Runtime events')
         return await self._connection_handler.execute_command(RuntimeCommands.disable())
 
     async def continue_request(
@@ -576,7 +576,7 @@ class Browser(ABC):  #编号：PLR0904
         intercept_response: Optional[bool] = None,
     ):
         """继续暂停的请求而不进行修改。"""
-        logger.debug(f'Continuing request: id={request_id}')
+        loguru_logger.debug(f'Continuing request: id={request_id}')
         return await self._execute_command(
             FetchCommands.continue_request(
                 request_id=request_id,
@@ -590,7 +590,7 @@ class Browser(ABC):  #编号：PLR0904
 
     async def fail_request(self, request_id: str, error_reason: ErrorReason):
         """请求失败并显示错误代码。"""
-        logger.debug(f'Failing request: id={request_id}, reason={error_reason}')
+        loguru_logger.debug(f'Failing request: id={request_id}, reason={error_reason}')
         return await self._execute_command(FetchCommands.fail_request(request_id, error_reason))
 
     async def fulfill_request(
@@ -602,7 +602,7 @@ class Browser(ABC):  #编号：PLR0904
         response_phrase: Optional[str] = None,
     ):
         """使用响应数据完成请求。"""
-        logger.debug(
+        loguru_logger.debug(
             f'Fulfilling request: id={request_id}, code={response_code}, '
             f'headers={bool(response_headers)}, body={bool(body)}'
         )
@@ -620,13 +620,13 @@ class Browser(ABC):  #编号：PLR0904
     def _validate_connection_port(connection_port: Optional[int]):
         """验证连接端口。"""
         if connection_port and connection_port < 0:
-            logger.error(f'Invalid connection port: {connection_port}')
+            loguru_logger.error(f'Invalid connection port: {connection_port}')
             raise InvalidConnectionPort()
 
     async def _continue_request_callback(self, event: RequestPausedEvent):
         """用于继续暂停的请求的内部回调。"""
         request_id = event['params']['requestId']
-        logger.debug(f'[Fetch] REQUEST_PAUSED -> continue: id={request_id}')
+        loguru_logger.debug(f'[Fetch] REQUEST_PAUSED -> continue: id={request_id}')
         return await self.continue_request(request_id)
 
     async def _continue_request_with_auth_callback(
@@ -637,7 +637,7 @@ class Browser(ABC):  #编号：PLR0904
     ):
         """代理身份验证的内部回调。"""
         request_id = event['params']['requestId']
-        logger.debug(
+        loguru_logger.debug(
             f'[Fetch] AUTH_REQUIRED -> provide credentials: id={request_id}, '
             f'user_set={bool(proxy_username)}'
         )
@@ -656,7 +656,7 @@ class Browser(ABC):  #编号：PLR0904
     async def _tab_continue_request_callback(event: RequestPausedEvent, tab: Tab):
         """用于在选项卡级别继续暂停的请求的内部回调。"""
         request_id = event['params']['requestId']
-        logger.debug(f'[Tab Fetch] REQUEST_PAUSED -> continue: id={request_id}')
+        loguru_logger.debug(f'[Tab Fetch] REQUEST_PAUSED -> continue: id={request_id}')
         return await tab.continue_request(request_id)
 
     @staticmethod
@@ -668,7 +668,7 @@ class Browser(ABC):  #编号：PLR0904
     ):
         """用于选项卡级别的代理/服务器身份验证的内部回调。"""
         request_id = event['params']['requestId']
-        logger.debug(
+        loguru_logger.debug(
             f'[Tab Fetch] AUTH_REQUIRED -> provide credentials: id={request_id}, '
             f'user_set={bool(proxy_username)}'
         )
@@ -691,7 +691,7 @@ class Browser(ABC):  #编号：PLR0904
         if not creds:
             return
         username, password = creds
-        logger.debug(
+        loguru_logger.debug(
             f'Enabling context-level proxy auth for tab (context={browser_context_id}, '
             f'user_set={bool(username)}'
         )
@@ -726,7 +726,7 @@ class Browser(ABC):  #编号：PLR0904
             return
 
         parsed = UserAgentParser.parse(user_agent)
-        logger.debug('Applying User-Agent override: %s', user_agent[:60])
+        loguru_logger.debug('Applying User-Agent override: %s', user_agent[:60])
 
         await tab._execute_command(
             EmulationCommands.set_user_agent_override(
@@ -756,9 +756,9 @@ class Browser(ABC):  #编号：PLR0904
 
         加薪：
             FailedToStartBrowser：如果浏览器启动失败。"""
-        logger.debug(f'Verifying browser is running (timeout={self.options.start_timeout})')
+        loguru_logger.debug(f'Verifying browser is running (timeout={self.options.start_timeout})')
         if not await self._is_browser_running(self.options.start_timeout):
-            logger.error('Browser failed to start within timeout')
+            loguru_logger.error('Browser failed to start within timeout')
             raise FailedToStartBrowser()
 
     async def _configure_proxy(
@@ -768,7 +768,7 @@ class Browser(ABC):  #编号：PLR0904
         if not private_proxy:
             return
 
-        logger.debug(
+        loguru_logger.debug(
             'Configuring proxy authentication: '
             f'credentials provided={bool(proxy_credentials[0] or proxy_credentials[1])}'
         )
@@ -809,12 +809,12 @@ class Browser(ABC):  #编号：PLR0904
         )
 
         if not valid_tab:
-            logger.error(f'No valid tab found among {len(targets)} targets')
+            loguru_logger.error(f'No valid tab found among {len(targets)} targets')
             raise NoValidTabFound()
 
         tab_id = valid_tab.get('targetId')
         if not tab_id:
-            logger.error('Valid tab missing targetId')
+            loguru_logger.error('Valid tab missing targetId')
             raise NoValidTabFound('Tab missing targetId')
 
         return tab_id
@@ -832,7 +832,7 @@ class Browser(ABC):  #编号：PLR0904
         self, command: Command[T_CommandParams, T_CommandResponse], timeout: int = 60
     ) -> T_CommandResponse:
         """执行CDP命令并返回结果（浏览器通信的核心方法）。"""
-        logger.debug(f'Executing command: {command.get("method")} (timeout={timeout})')
+        loguru_logger.debug(f'Executing command: {command.get("method")} (timeout={timeout})')
         return await self._connection_handler.execute_command(command, timeout=timeout)
 
     def _setup_user_dir(self):
@@ -846,7 +846,7 @@ class Browser(ABC):  #编号：PLR0904
             self.options.arguments.append(f'--user-data-dir={temp_dir.name}')
             if self.options.browser_preferences:
                 self._set_browser_preferences_in_temp_dir(temp_dir)
-        logger.debug(f'User dir setup complete: {self._get_user_data_dir()}')
+        loguru_logger.debug(f'User dir setup complete: {self._get_user_data_dir()}')
 
     def _set_browser_preferences_in_temp_dir(self, temp_dir: TemporaryDirectory):
         os.mkdir(os.path.join(temp_dir.name, 'Default'))
@@ -855,7 +855,7 @@ class Browser(ABC):  #编号：PLR0904
             os.path.join(temp_dir.name, 'Default', 'Preferences'), 'w', encoding='utf-8'
         ) as json_file:
             json.dump(preferences, json_file)
-        logger.debug('Wrote browser preferences to temp user dir')
+        loguru_logger.debug('Wrote browser preferences to temp user dir')
 
     def _set_browser_preferences_in_user_data_dir(self, user_data_dir: str):
         """在用户数据目录中设置浏览器首选项。
@@ -885,7 +885,7 @@ class Browser(ABC):  #编号：PLR0904
         preferences.update(self.options.browser_preferences)
         with open(preferences_path, 'w', encoding='utf-8') as json_file:
             json.dump(preferences, json_file, indent=2)
-        logger.debug(f'Updated browser preferences in user data dir: {preferences_path}')
+        loguru_logger.debug(f'Updated browser preferences in user data dir: {preferences_path}')
 
     def _get_user_data_dir(self) -> Optional[str]:
         for arg in self.options.arguments:
@@ -898,10 +898,10 @@ class Browser(ABC):  #编号：PLR0904
         """验证 WebSocket 地址。"""
         min_slashes = 4
         if not ws_address.startswith(('ws://', 'wss://')):
-            logger.error('Invalid WebSocket address: missing ws:// or wss:// prefix')
+            loguru_logger.error('Invalid WebSocket address: missing ws:// or wss:// prefix')
             raise InvalidWebSocketAddress('WebSocket address must start with ws:// or wss://')
         if len(ws_address.split('/')) < min_slashes:
-            logger.error('Invalid WebSocket address: not enough slashes')
+            loguru_logger.error('Invalid WebSocket address: not enough slashes')
             raise InvalidWebSocketAddress(
                 f'WebSocket address must contain at least {min_slashes} slashes'
             )
@@ -912,7 +912,7 @@ class Browser(ABC):  #编号：PLR0904
         self._ws_address = ws_address
         self._connection_handler._ws_address = self._ws_address
         await self._connection_handler._ensure_active_connection()
-        logger.info('WebSocket address set for browser-level connection')
+        loguru_logger.info('WebSocket address set for browser-level connection')
 
     def _get_tab_kwargs(self, target_id: str, browser_context_id: Optional[str] = None) -> dict:
         """获取用于根据 WebSocket 地址创建选项卡的 kwargs。
@@ -933,7 +933,7 @@ class Browser(ABC):  #编号：PLR0904
             kwargs['ws_address'] = self._get_tab_ws_address(target_id)
         else:
             kwargs['connection_port'] = self._connection_port
-        logger.debug(f'Tab kwargs resolved for {target_id}: using_ws={bool(self._ws_address)}')
+        loguru_logger.debug(f'Tab kwargs resolved for {target_id}: using_ws={bool(self._ws_address)}')
         return kwargs
 
     def _get_tab_ws_address(self, tab_id: str) -> str:
@@ -951,7 +951,7 @@ class Browser(ABC):  #编号：PLR0904
         #保留scheme和netloc；构建页面路径并保留查询/片段
         page_path = f'/devtools/page/{tab_id}'
         ws = urlunsplit((parts.scheme, parts.netloc, page_path, parts.query, parts.fragment))
-        logger.debug(f'Resolved tab WebSocket address: {ws}')
+        loguru_logger.debug(f'Resolved tab WebSocket address: {ws}')
         return ws
 
     @staticmethod

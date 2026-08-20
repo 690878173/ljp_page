@@ -8,7 +8,7 @@ from .backends import Async,ThreadPool,BackendRouter
 from .registry import TaskRegistry
 from .task import Task, TaskSubmitConfig
 from ljp_page._module.tools.bind import coerce_bind_task,BindTask
-from ljp_page.logger import logger
+from ljp_page.logger import loguru_logger
 __all__ = ["LJPExc","BindTask"]
 
 class LJPExc:
@@ -30,7 +30,7 @@ class LJPExc:
         semaphore_limits: dict[str, int] | None = None,
         history_limit: int = 1000,
     ) -> None:
-        self.log = log or logger
+        self.log = log or loguru_logger
         self._registry = TaskRegistry(history_limit=history_limit)
         self._semaphores = self._build_named_semaphores(
             sem1_concurrent,
@@ -38,7 +38,7 @@ class LJPExc:
             semaphore_limits,
         )
         self._router = BackendRouter(
-            logger=logger,
+            logger=loguru_logger,
             thread_pool=thread_pool,
             asy=asy,
             thread_max_workers=thread_max_workers,

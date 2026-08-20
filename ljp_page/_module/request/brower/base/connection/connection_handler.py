@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 
     from ..protocol.base import Command, T_CommandParams, T_CommandResponse
 
-from ljp_page.logger import logger
+from ljp_page.logger import loguru_logger
 
 
 class ConnectionHandler:
@@ -61,8 +61,8 @@ class ConnectionHandler:
         self._command_manager = CommandsManager()
         self._events_handler = EventsManager()
         self._receive_task: Optional[asyncio.Task] = None
-        logger.debug('ConnectionHandler initialized.')
-        logger.debug(
+        loguru_logger.debug('ConnectionHandler initialized.')
+        loguru_logger.debug(
             f'Init params: port={self._connection_port}, page_id={self._page_id}, '
             f'ws_address_set={bool(self._ws_address)}'
         )
@@ -80,10 +80,10 @@ class ConnectionHandler:
     async def ping(self) -> bool:
         """测试 WebSocket 连接是否处于活动状态且响应良好。"""
         with suppress(Exception):
-            logger.debug('Pinging WebSocket connection')
+            loguru_logger.debug('Pinging WebSocket connection')
             await self._ensure_active_connection()
             await cast(ClientConnection, self._ws_connection).ping()
-            logger.debug('Ping OK')
+            loguru_logger.debug('Ping OK')
             return True
         return False
 
@@ -108,7 +108,7 @@ class ConnectionHandler:
 
         try:
             ws = cast(ClientConnection, self._ws_connection)
-            logger.debug(
+            loguru_logger.debug(
                 f'Sending command: id={command.get("id")}, method={command.get("method")}, '
                 f'timeout={timeout}s'
             )
@@ -116,18 +116,18 @@ class ConnectionHandler:
             await ws.send(command_str)
             response: str = await asyncio.wait_for(future, timeout)
             elapsed = asyncio.get_event_loop().time() - start
-            logger.debug(f'Command completed: id={command.get("id")} in {elapsed:.3f}s')
+            loguru_logger.debug(f'Command completed: id={command.get("id")} in {elapsed:.3f}s')
             return json.loads(response)
         except asyncio.TimeoutError:
             self._command_manager.remove_pending_command(command['id'])
-            logger.error(
+            loguru_logger.error(
                 f'Command timeout: id={command.get("id")}, method={command.get("method")}, '
                 f'timeout={timeout}s'
             )
             raise CommandExecutionTimeout()
         except websockets.ConnectionClosed:
             await self._handle_connection_loss()
-            logger.warning(f'WebSocket connection closed during command: id={command.get("id")}')
+            loguru_logger.warning(f'WebSocket connection closed during command: id={command.get("id")}')
             raise WebSocketConnectionClosed()
 
     async def register_callback(
@@ -149,7 +149,7 @@ class ConnectionHandler:
         注意：
             在事件触发之前必须启用相应的 CDP 域。"""
         callback_id = self._events_handler.register_callback(event_name, callback, temporary)
-        logger.debug(
+        loguru_logger.debug(
             f'Registered callback: id={callback_id}, event={event_name}, temporary={temporary}'
         )
         return callback_id
@@ -157,53 +157,53 @@ class ConnectionHandler:
     async def remove_callback(self, callback_id: int) -> bool:
         """通过 ID 删除已注册的事件回调。"""
         removed = self._events_handler.remove_callback(callback_id)
-        logger.debug(f'Removed callback: id={callback_id}, removed={removed}')
+        loguru_logger.debug(f'Removed callback: id={callback_id}, removed={removed}')
         return removed
 
     async def clear_callbacks(self):
         """删除所有已注册的事件回调。"""
-        logger.debug('Clearing all callbacks')
+        loguru_logger.debug('Clearing all callbacks')
         self._events_handler.clear_callbacks()
 
     async def close(self):
         """关闭WebSocket连接并释放资源。"""
         await self.clear_callbacks()
         if self._ws_connection is None:
-            logger.debug('Close called but no active WebSocket connection')
+            loguru_logger.debug('Close called but no active WebSocket connection')
             return
 
         with suppress(websockets.ConnectionClosed):
             await self._ws_connection.close()
-        logger.info('WebSocket connection closed.')
+        loguru_logger.info('WebSocket connection closed.')
 
     async def _ensure_active_connection(self):
         """确保存在活动连接，并根据需要建立新连接。"""
         if self._ws_connection is None or self._ws_connection.state is State.CLOSED:
-            logger.debug('No active WebSocket connection; establishing new one')
+            loguru_logger.debug('No active WebSocket connection; establishing new one')
             await self._establish_new_connection()
 
     async def _establish_new_connection(self):
         """创建新的 WebSocket 连接并开始事件侦听。"""
         ws_address = await self._resolve_ws_address()
-        logger.info(f'Connecting to {ws_address}')
+        loguru_logger.info(f'Connecting to {ws_address}')
         self._ws_connection = await self._ws_connector(
             ws_address,
             max_size=1024 * 1024 * 10,  # 限制为 10MB
         )
         self._receive_task = asyncio.create_task(self._receive_events())
-        logger.debug('WebSocket connection established')
+        loguru_logger.debug('WebSocket connection established')
 
     async def _resolve_ws_address(self):
         """根据页面ID确定正确的WebSocket地址。"""
         if self._ws_address:
-            logger.debug('Using provided WebSocket address')
+            loguru_logger.debug('Using provided WebSocket address')
             return self._ws_address
         if not self._page_id:
             resolved = await self._ws_address_resolver(self._connection_port)
-            logger.debug(f'Resolved browser-level WebSocket address: {resolved}')
+            loguru_logger.debug(f'Resolved browser-level WebSocket address: {resolved}')
             return resolved
         address = f'ws://localhost:{self._connection_port}/devtools/page/{self._page_id}'
-        logger.debug(f'Resolved page-level WebSocket address: {address}')
+        loguru_logger.debug(f'Resolved page-level WebSocket address: {address}')
         return address
 
     async def _handle_connection_loss(self):
@@ -215,7 +215,7 @@ class ConnectionHandler:
         if self._receive_task and not self._receive_task.done():
             self._receive_task.cancel()
 
-        logger.info('Connection resources cleaned up')
+        loguru_logger.info('Connection resources cleaned up')
 
     async def _receive_events(self):
         """用于接收和处理 WebSocket 消息的主循环。"""
@@ -223,9 +223,9 @@ class ConnectionHandler:
             async for raw_message in self._incoming_messages():
                 await self._process_single_message(raw_message)
         except websockets.ConnectionClosed as e:
-            logger.info(f'Connection closed gracefully: {e}')
+            loguru_logger.info(f'Connection closed gracefully: {e}')
         except Exception as e:
-            logger.error(f'Unexpected error in event loop: {e}')
+            loguru_logger.error(f'Unexpected error in event loop: {e}')
             raise
 
     async def _incoming_messages(self) -> AsyncGenerator[Union[str, bytes], None]:
@@ -254,7 +254,7 @@ class ConnectionHandler:
         try:
             return json.loads(raw_message)
         except json.JSONDecodeError:
-            logger.warning(f'Failed to parse message: {raw_message[:200]}...')
+            loguru_logger.warning(f'Failed to parse message: {raw_message[:200]}...')
             return None
 
     @staticmethod
@@ -264,13 +264,13 @@ class ConnectionHandler:
 
     async def _handle_command_message(self, message: Response):
         """处理命令响应消息。"""
-        logger.debug(f'Processing command response: {message.get("id")}')
+        loguru_logger.debug(f'Processing command response: {message.get("id")}')
         self._command_manager.resolve_command(message['id'], json.dumps(message))
 
     async def _handle_event_message(self, message: CDPEvent):
         """处理事件通知消息。"""
         event_type = message.get('method', 'unknown-event')
-        logger.debug(f'Processing {event_type} event')
+        loguru_logger.debug(f'Processing {event_type} event')
         await self._events_handler.process_event(message)
 
     def __repr__(self):

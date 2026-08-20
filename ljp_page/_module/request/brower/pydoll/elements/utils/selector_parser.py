@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 
-from ljp_page.logger import logger
+from ljp_page.logger import loguru_logger
 import re
 from typing import Optional
 
@@ -101,7 +101,7 @@ class SelectorParser:
         xpath = (
             f'{base_xpath}[{" and ".join(xpath_conditions)}]' if xpath_conditions else base_xpath
         )
-        logger.debug(f'build_xpath() -> {xpath}')
+        loguru_logger.debug(f'build_xpath() -> {xpath}')
         return xpath
 
     #------------------------------------------------------------------

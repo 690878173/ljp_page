@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from functools import wraps
 from typing import Any, Callable, Coroutine, List, Optional, Type, TypeVar, Union
 
-from ljp_page.logger import logger
+from ljp_page.logger import loguru_logger
 
 T = TypeVar('T')
 
@@ -119,7 +119,7 @@ def retry(
                     if not config.is_matching_exception(exc):
                         raise exc
                     if attempt == 0:
-                        logger.error(f'进行重试 -->  {exc}')
+                        loguru_logger.error(f'进行重试 -->  {exc}')
                     last_exception = exc
 
                     if attempt < config.max_retries:

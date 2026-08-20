@@ -12,7 +12,7 @@ import aiofiles
 
 from ljp_page._core.base import Ljp_BaseClass_Logger
 from ljp_page._core.exceptions import CloseFileException, OpenFileException
-from ljp_page._core.logger import logger
+from ljp_page._core.logger import loguru_logger
 
 
 # TODO 考虑删除此文件，目录模式考虑保留
@@ -22,7 +22,7 @@ class _FileHandlerBase(Ljp_BaseClass_Logger):
 
     def __init__(self, max_open_files: int = 100):
         super().__init__()
-        self.logger = logger
+        self.logger = loguru_logger
         self._max_open_files = max(1, int(max_open_files))
         self._file_dict: OrderedDict[Path, Any] = OrderedDict()
         self._access_time: dict[Path, float] = {}
@@ -168,7 +168,7 @@ class _DirectoryBase(Ljp_BaseClass_Logger):
         mode: str = "mode1",
     ):
         super().__init__()
-        self.logger = logger
+        self.logger = loguru_logger
         self._directory_path = Path(directory_path).expanduser().resolve()
         self._directory_num = max(1, int(directory_num))
         self._mode = mode
@@ -297,7 +297,7 @@ class ManagedAsyncFile(Ljp_BaseClass_Logger):
         encoding: str = "utf-8",
     ) -> None:
         super().__init__()
-        self.logger = logger
+        self.logger = loguru_logger
         self.path = Path(file_path).expanduser().resolve()
         self.mode = mode
         self.encoding = encoding

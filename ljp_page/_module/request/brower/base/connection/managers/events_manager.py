@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from ljp_page._module.request.brower.base.protocol.base import CDPEvent
     from ljp_page._module.request.brower.base.protocol.network.events import RequestWillBeSentEvent
 
-from ljp_page.logger import logger
+from ljp_page.logger import loguru_logger
 
 
 class EventsManager:
@@ -33,8 +33,8 @@ class EventsManager:
         self._callback_id = 0
         self.network_logs: list[RequestWillBeSentEvent] = []
         self.dialog = JavascriptDialogOpeningEvent()  #类型：忽略
-        logger.info('EventsManager initialized')
-        logger.debug('Initial state: callbacks=0, logs=0, dialog=empty')
+        loguru_logger.info('EventsManager initialized')
+        loguru_logger.debug('Initial state: callbacks=0, logs=0, dialog=empty')
 
     def register_callback(
         self, event_name: str, callback: Callable[[dict], Any], temporary: bool = False
@@ -54,8 +54,8 @@ class EventsManager:
             'callback': callback,
             'temporary': temporary,
         }
-        logger.info(f"Registered callback '{event_name}' with ID {self._callback_id}")
-        logger.debug(
+        loguru_logger.info(f"Registered callback '{event_name}' with ID {self._callback_id}")
+        loguru_logger.debug(
             f'Callback details: temporary={temporary}, total_callbacks={len(self._event_callbacks)}'
         )
         return self._callback_id
@@ -63,19 +63,19 @@ class EventsManager:
     def remove_callback(self, callback_id: int) -> bool:
         """通过 ID 删除回调。"""
         if callback_id not in self._event_callbacks:
-            logger.warning(f'Callback ID {callback_id} not found')
+            loguru_logger.warning(f'Callback ID {callback_id} not found')
             return False
 
         del self._event_callbacks[callback_id]
-        logger.info(f'Removed callback ID {callback_id}')
-        logger.debug(f'Remaining callbacks: {len(self._event_callbacks)}')
+        loguru_logger.info(f'Removed callback ID {callback_id}')
+        loguru_logger.debug(f'Remaining callbacks: {len(self._event_callbacks)}')
         return True
 
     def clear_callbacks(self):
         """删除所有已注册的回调。"""
         self._event_callbacks.clear()
-        logger.info('All callbacks cleared')
-        logger.debug('Callbacks store is now empty')
+        loguru_logger.info('All callbacks cleared')
+        loguru_logger.debug('Callbacks store is now empty')
 
     async def process_event(self, event_data: CDPEvent):
         """处理接收到的事件并触发回调。
@@ -83,7 +83,7 @@ class EventsManager:
         处理特殊事件（网络请求、对话框）和更新
         触发注册回调之前的内部状态。"""
         event_name = event_data['method']
-        logger.debug(f'Processing event: {event_name}')
+        loguru_logger.debug(f'Processing event: {event_name}')
 
         if 'Network.requestWillBeSent' in event_name:
             self._update_network_logs(event_data)
@@ -116,13 +116,13 @@ class EventsManager:
                     else:
                         cb_data['callback'](event_data)
                 except Exception as e:
-                    logger.error(f'Error in callback {cb_id}: {str(e)}')
+                    loguru_logger.error(f'Error in callback {cb_id}: {str(e)}')
 
                 if cb_data['temporary']:
                     callbacks_to_remove.append(cb_id)
 
         for cb_id in callbacks_to_remove:
             self.remove_callback(cb_id)
-        logger.debug(
+        loguru_logger.debug(
             f"Triggered callbacks for '{event_name}'. Removed temporaries: {callbacks_to_remove}"
         )

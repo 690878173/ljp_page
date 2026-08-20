@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, TYPE_CHECKING, Mapping, Callable, Optional, Type, Union, List
 from urllib.parse import urlparse
 from ljp_page._core.exceptions import ConfigError
@@ -91,17 +92,32 @@ class RetryConfig:
 class LogConfig:
     """日志策略配置。"""
     default_level: int = 5
-    enabled_levels: list[int] = field(default_factory=lambda: list(range(1, 20)))
-    level_names :Mapping[int, str] | None = None
+    enabled_levels: set[int] = field(default_factory=lambda: set(range(1, 20)))
+    level_map : Mapping[int, str] = None
     aliases: dict[str, int] | None = None
-    log_file_path: str | None = None
+    log_file_path: str| Path | None = None
     output_console: bool = True
     output_file: bool = True
 
-    def debug(self):
+    def use_debug(self):
         self.output_console = True
         self.output_file = True
         self.default_level = 1
+
+
+    def __post_init__(self):
+        if not self.level_map:
+            self.level_map = {
+                1: "debug", 2: "trace", 3: "verbose", 4: "notice", 5: "info",
+                6: "print", 7: "event", 8: "check", 9: "risk", 10: "warning",
+                11: "warn_plus", 12: "alert", 13: "issue", 14: "error_minor",
+                15: "error", 16: "fatal", 17: "panic", 18: "security",
+                19: "critical", 20: "off"
+            }
+
+
+        if not self.log_file_path:
+            self.log_file_path = Path(f'logs/')
 
 
 

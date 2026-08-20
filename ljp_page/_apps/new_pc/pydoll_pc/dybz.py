@@ -7,7 +7,7 @@ from ljp_page._core._exceptions import LjpBaseException
 from ljp_page._module.request.html import Html
 from ljp_page._module.app.pc.base import Config, P1Item, P1Result, P2Item, P2Result, P3Item
 from ljp_page._apps.new_pc.pydoll_pc.xs import Xs
-from ljp_page.logger import logger
+from ljp_page.logger import loguru_logger
 
 from ljp_page.ocr import Ocr
 ocr = Ocr()
@@ -122,7 +122,7 @@ class Md(Xs):
                             )
 
                     except Exception as e:
-                        logger.warning(f"OCR 识别失败: {e}")
+                        loguru_logger.warning(f"OCR 识别失败: {e}")
                         text = "[图片]"
 
                     current_line.append(text)
@@ -259,7 +259,7 @@ class Md(Xs):
 
             return P3Item(url=url,name=title,content=content,next_url=next_url)
         except Exception as e:
-            logger.error(e)
+            loguru_logger.error(e)
             raise LjpBaseException(message=f'出错', e=e)
 
 if __name__ == '__main__':

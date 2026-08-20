@@ -10,7 +10,7 @@ from typing import Any
 from ljp_page._core.exceptions import HtmlParseError, MeetCheckError, No, Notfound
 from ljp_page._module.file.model import ManagedAsyncFile
 from ljp_page._module.request.session import LjpResponse
-from ljp_page.logger import logger
+from ljp_page.logger import loguru_logger
 
 from ljp_page._module.app.pc.base import P1Item, P1Result, P2Item, P2Result, P3Item
 from ljp_page._module.app.pc.base import BasePc
@@ -72,9 +72,9 @@ class XsManager:
 
         self.expected_id = self._get_last_completed_chapter_id(content) + 1
         await self._trim_incomplete_tail(content)
-        logger.info(f"章节管理器初始化: {self.data.name}-->{self.data.url}")
+        loguru_logger.info(f"章节管理器初始化: {self.data.name}-->{self.data.url}")
         if self.expected_id > 1:
-            logger.info(f"检测到断点文件，将从第 {self.expected_id} 章继续写入")
+            loguru_logger.info(f"检测到断点文件，将从第 {self.expected_id} 章继续写入")
 
         await self.target_init(content)
         return True
@@ -122,7 +122,7 @@ class XsManager:
                         )
                         await self.file_handle.write(chapter_text)
                     else:
-                        logger.warning(f"写入章节内容为空: {chapter_title} ({current.url})")
+                        loguru_logger.warning(f"写入章节内容为空: {chapter_title} ({current.url})")
 
                     self.expected_id += 1
                 await self.file_handle.flush()
@@ -137,7 +137,7 @@ class XsManager:
         try:
             if self.expected_id <= total_chapters or self.pending:
                 await self.file_handle.close()
-                logger.warning(f"章节未全部写完，保留断点文件: {self.file_handle.path}")
+                loguru_logger.warning(f"章节未全部写完，保留断点文件: {self.file_handle.path}")
                 return
 
             await self.file_handle.switch_to_write(append=True)
@@ -147,9 +147,9 @@ class XsManager:
             await self._export_readable_file(content)
             await self.file_handle.close()
             await self._remove_download_file()
-            logger.info(f"下载完成: {self.data.name}")
+            loguru_logger.info(f"下载完成: {self.data.name}")
         except Exception as exc:
-            logger.error(f"关闭文件失败: {exc}")
+            loguru_logger.error(f"关闭文件失败: {exc}")
 
     @classmethod
     def _get_last_completed_chapter_id(cls, content: str) -> int:
@@ -304,7 +304,7 @@ class Xs(BasePc,ABC):
                 return
             await self.download(p2_result)
         except Exception as exc:
-            logger.error(f"p2_work 任务出错:: {exc}")
+            loguru_logger.error(f"p2_work 任务出错:: {exc}")
 
     @f_mark('format_p2,请求和解析，返回P2res')
     async def get_p2_result(self,p1_item) -> P2Result | None:
@@ -374,9 +374,9 @@ class Xs(BasePc,ABC):
             return res
 
         except Notfound as exc:
-            logger.warning(f"资源不存在 id={p1_item}: {exc}")
+            loguru_logger.warning(f"资源不存在 id={p1_item}: {exc}")
         except Exception as exc:
-            logger.error(f"p2 任务出错: id={p1_item}: {exc}")
+            loguru_logger.error(f"p2 任务出错: id={p1_item}: {exc}")
 
     @f_mark('整体章节调度，初始化管理器')
     async def download(self, p2_result: P2Result) -> None:
@@ -390,7 +390,7 @@ class Xs(BasePc,ABC):
                 download_name = self.manager.get_download_file_path(safe_title)
                 finished_path = self.file_manager.directory.find_file_path(final_name)
                 if finished_path is not None:
-                    logger.info(f"检测到完整文件，跳过下载: {finished_path}")
+                    loguru_logger.info(f"检测到完整文件，跳过下载: {finished_path}")
                     continue
 
                 download_path = self.file_manager.directory.find_file_path(download_name)
@@ -425,12 +425,12 @@ class Xs(BasePc,ABC):
                     try:
                         await handle
                     except Exception as exc:
-                        logger.error(f"章节任务出错: {exc}")
+                        loguru_logger.error(f"章节任务出错: {exc}")
 
                 await manager.finish(total_chapters=len(p2_item.p3items))
 
         except Exception as exc:
-            logger.error(f"下载流程失败: {exc}")
+            loguru_logger.error(f"下载流程失败: {exc}")
             raise No("下载流程失败") from exc
 
     @f_mark('章节下载，添加到管理器')
@@ -449,7 +449,7 @@ class Xs(BasePc,ABC):
                 response = await self.req.get(url=current_url)
                 html_str = response
                 if not html_str:
-                    logger.warning(f"p3 响应为空: id={p3_id}, url={current_url}")
+                    loguru_logger.warning(f"p3 响应为空: id={p3_id}, url={current_url}")
                     break
 
                 parsed = await self.parser_manager.parse_html(self.parse_p3, html_str, current_url)
@@ -467,10 +467,10 @@ class Xs(BasePc,ABC):
                 continue
             except HtmlParseError as e:
                 self.html_parse_error(html_str)
-                logger.error(e)
+                loguru_logger.error(e)
                 raise Notfound(e=e)
             except Exception as exc:
-                logger.error(f"获取 p3 出错: id={p3_id}, url={current_url}, error={exc}")
+                loguru_logger.error(f"获取 p3 出错: id={p3_id}, url={current_url}, error={exc}")
                 break
 
         await manager.add_p3(

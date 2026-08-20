@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from ljp_page._module.request.brower.pydoll.elements.web_element import WebElement
     from dom.methods import GetOuterHTMLResponse
 
-from ljp_page.logger import logger
+from ljp_page.logger import loguru_logger
 
 
 class ShadowRoot(FindElementsMixin):
@@ -58,7 +58,7 @@ class ShadowRoot(FindElementsMixin):
             self._routing_session_id = getattr(host_element, '_routing_session_id', None)
             self._routing_parent_frame_id = getattr(host_element, '_routing_parent_frame_id', None)
 
-        logger.debug(
+        loguru_logger.debug(
             f'ShadowRoot initialized: object_id={self._object_id}, mode={self._mode.value}'
         )
 

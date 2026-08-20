@@ -8,7 +8,7 @@ from typing import Any, Callable, Awaitable
 
 from ljp_page._module.request.session.pool import SessionPool as Session
 from ljp_page._module.request.verification import SessionVerificationContext
-from ljp_page.logger import logger
+from ljp_page.logger import loguru_logger
 
 from .config import Config
 
@@ -52,7 +52,7 @@ class RequestManager(BaseRequest):
             self.session.verification.set_verification(
                 self._verify_check, self._verify_handle,
             )
-            logger.info("session 初始化完成")
+            loguru_logger.info("session 初始化完成")
 
     async def _verify_check(self, response: Any) -> bool:
         return await self._on_verify_check(response.text)
@@ -63,7 +63,7 @@ class RequestManager(BaseRequest):
     async def get(
         self, url: str, session: Any = None, check_fp: bool = True, **kwargs: Any,
     ) -> Any:
-        logger.debug(f"GET {url}")
+        loguru_logger.debug(f"GET {url}")
         return await self.session.get(url, session=session, verify_response=check_fp, **kwargs)
 
     async def close(self) -> None:

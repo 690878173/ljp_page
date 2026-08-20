@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from ljp_page.logger import logger
+from ljp_page.logger import loguru_logger
 from typing import TYPE_CHECKING, cast, overload
 
 from ljp_page._module.request.brower.pydoll.commands import (
@@ -171,7 +171,7 @@ class FindElementsMixin:
                 'find() is not supported on ShadowRoot. Use query() with a CSS selector instead.'
             )
 
-        logger.debug(
+        loguru_logger.debug(
             f'find() called with id={id}, class_name={class_name}, name={name}, '
             f'tag_name={tag_name}, text={text}, timeout={timeout}, '
             f'find_all={find_all}, raise_exc={raise_exc}, attrs={attributes}'
@@ -192,7 +192,7 @@ class FindElementsMixin:
         by, value = self._get_by_and_value(
             by_map, id, class_name, name, tag_name, text, **attributes
         )
-        logger.debug(f'find() resolved to by={by} value={value}')
+        loguru_logger.debug(f'find() resolved to by={by} value={value}')
         return await self.find_or_wait_element(
             by, value, timeout=timeout, find_all=find_all, raise_exc=raise_exc
         )
@@ -268,12 +268,12 @@ class FindElementsMixin:
                 'XPath is not supported on ShadowRoot. Use a CSS selector instead.'
             )
 
-        logger.debug(
+        loguru_logger.debug(
             f'query() called with expression={expression}, timeout={timeout}, '
             f'find_all={find_all}, raise_exc={raise_exc}'
         )
         by = self._get_expression_type(expression)
-        logger.debug(f'query() resolved to by={by}')
+        loguru_logger.debug(f'query() resolved to by={by}')
         return await self.find_or_wait_element(
             by=by, value=expression, timeout=timeout, find_all=find_all, raise_exc=raise_exc
         )
@@ -305,7 +305,7 @@ class FindElementsMixin:
         加薪：
             ElementNotFound：如果在 timeout=0 且 raise_exc=True 的情况下未找到元素。
             WaitElementTimeout：如果在超时内未找到元素且 raise_exc=True。"""
-        logger.debug(
+        loguru_logger.debug(
             f'find_or_wait_element(): by={by}, value={value}, timeout={timeout}, '
             f'find_all={find_all}, raise_exc={raise_exc}'
         )
@@ -324,21 +324,21 @@ class FindElementsMixin:
         start_time = asyncio.get_event_loop().time()
 
         if not timeout:
-            logger.debug('No timeout specified; performing single attempt')
+            loguru_logger.debug('No timeout specified; performing single attempt')
             return await find_method(by, value, raise_exc=raise_exc)
 
         while True:
             element = await find_method(by, value, raise_exc=False)
             if element:
                 if isinstance(element, list):
-                    logger.debug(f'Found {len(element)} elements within timeout window')
+                    loguru_logger.debug(f'Found {len(element)} elements within timeout window')
                 else:
-                    logger.debug('Found 1 element within timeout window')
+                    loguru_logger.debug('Found 1 element within timeout window')
                 return element
 
             if asyncio.get_event_loop().time() - start_time > timeout:
                 if raise_exc:
-                    logger.error('Timeout while waiting for elements')
+                    loguru_logger.error('Timeout while waiting for elements')
                     raise WaitElementTimeout(
                         f'Timed out after {timeout}s waiting for element '
                         f'(by={by.value}, value={value!r})'
@@ -446,7 +446,7 @@ class FindElementsMixin:
 
         加薪：
             ElementNotFound：如果未找到元素且 raise_exc=True。"""
-        logger.debug(f'_find_element(): by={by}, value={value}, raise_exc={raise_exc}')
+        loguru_logger.debug(f'_find_element(): by={by}, value={value}, raise_exc={raise_exc}')
         iframe_context = None
         if getattr(self, 'is_iframe', False):
             element_self = cast('WebElement', self)
@@ -470,13 +470,13 @@ class FindElementsMixin:
 
         if not self._has_object_id_key(response_for_command):
             if raise_exc:
-                logger.debug('Element not found and raise_exc=True')
+                loguru_logger.debug('Element not found and raise_exc=True')
                 raise ElementNotFound()
             return None
 
         object_id = response_for_command['result']['result']['objectId']
         attributes = await self._get_object_attributes(object_id=object_id)
-        logger.debug(f'_find_element() found object_id={object_id}')
+        loguru_logger.debug(f'_find_element() found object_id={object_id}')
         element = create_web_element(
             object_id,
             self._connection_handler,
@@ -507,7 +507,7 @@ class FindElementsMixin:
 
         加薪：
             ElementNotFound：如果没有找到元素且 raise_exc=True。"""
-        logger.debug(f'_find_elements(): by={by}, value={value}, raise_exc={raise_exc}')
+        loguru_logger.debug(f'_find_elements(): by={by}, value={value}, raise_exc={raise_exc}')
         iframe_context = None
         if getattr(self, 'is_iframe', False):
             element_self = cast('WebElement', self)
@@ -531,7 +531,7 @@ class FindElementsMixin:
 
         if not response_for_command.get('result', {}).get('result', {}).get('objectId'):
             if raise_exc:
-                logger.debug('No elements found and raise_exc=True')
+                loguru_logger.debug('No elements found and raise_exc=True')
                 raise ElementNotFound()
             return []
 
@@ -567,7 +567,7 @@ class FindElementsMixin:
             )
             self._apply_iframe_context_to_element(child, inherited_context)
             elements.append(child)
-        logger.debug(f'_find_elements() returning {len(elements)} elements')
+        loguru_logger.debug(f'_find_elements() returning {len(elements)} elements')
         return elements
 
     async def _get_object_attributes(self, object_id: str) -> list[str]:
@@ -596,13 +596,13 @@ class FindElementsMixin:
 
         对于单个属性：使用直接选择器策略。
         对于多个属性：构建 XPath 表达式。"""
-        logger.debug(
+        loguru_logger.debug(
             f'_get_by_and_value(): id={id}, class_name={class_name}, name={name}, '
             f'tag_name={tag_name}, text={text}, attrs={attributes}'
         )
         xpath_raw = attributes.get('xpath')
         if isinstance(xpath_raw, str) and xpath_raw:
-            logger.debug(f'Explicit XPath provided; using raw expression: {xpath_raw}')
+            loguru_logger.debug(f'Explicit XPath provided; using raw expression: {xpath_raw}')
             return By.XPATH, xpath_raw
 
         simple_selectors = {
@@ -616,11 +616,11 @@ class FindElementsMixin:
         if len(provided_selectors) == 1 and not text and not attributes:
             key, value = next(iter(provided_selectors.items()))
             by = by_map[key]
-            logger.debug(f'Simple selector resolved: by={by}, value={value}')
+            loguru_logger.debug(f'Simple selector resolved: by={by}, value={value}')
             return by, value
 
         xpath = self._build_xpath(id, class_name, name, tag_name, text, **attributes)
-        logger.debug(f'Complex selector resolved to XPath: {xpath}')
+        loguru_logger.debug(f'Complex selector resolved to XPath: {xpath}')
         return By.XPATH, xpath
 
     @staticmethod

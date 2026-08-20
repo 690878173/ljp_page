@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from typing import Any
 from ljp_page._core.logger import DEFAULT_LEVEL_ALIASES
-from .logger import logger
+from .logger import loguru_logger
 
 
 class Ljp_BaseClass_Logger:
     def __init__(self):
-        self.logger = logger
+        self.logger = loguru_logger
 
     def set_logger(self, logger: Any) -> None:
         self.logger = logger

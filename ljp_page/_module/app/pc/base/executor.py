@@ -8,7 +8,7 @@ from typing import Any
 
 from ljp_page._core.utils.other import f_mark
 from ljp_page._module.runtime import LJPExc
-from ljp_page.logger import logger
+from ljp_page.logger import loguru_logger
 
 from .config import Config
 from .controller import LifecycleController
@@ -45,7 +45,7 @@ class BasePc(ABC):
         self.controller = LifecycleController()
 
         # 运行时
-        self.exc = LJPExc(logger)
+        self.exc = LJPExc(loguru_logger)
         self.exc.set_semaphore("sem2", config.chapter_concurrency)
 
         # 组件
@@ -128,9 +128,9 @@ class BasePc(ABC):
             return res
         try:
             res.result()
-            logger.info("所有任务完成")
+            loguru_logger.info("所有任务完成")
         except KeyboardInterrupt:
-            logger.warning("用户中断")
+            loguru_logger.warning("用户中断")
             return None
         finally:
             self._stop()
@@ -141,7 +141,7 @@ class BasePc(ABC):
         await self.before_run()
         handler = self._mode_handlers.get(self.config.mode)
         if handler is None:
-            logger.error(f"未知模式: {self.config.mode}")
+            loguru_logger.error(f"未知模式: {self.config.mode}")
             return
         await handler()
         await self.after_run()
@@ -161,11 +161,11 @@ class BasePc(ABC):
 
     def pause(self) -> None:
         self.controller.pause()
-        logger.info("任务暂停")
+        loguru_logger.info("任务暂停")
 
     def resume(self) -> None:
         self.controller.resume()
-        logger.info("任务继续")
+        loguru_logger.info("任务继续")
 
     def close(self) -> None:
         self._stop()
@@ -173,7 +173,7 @@ class BasePc(ABC):
     def _stop(self) -> None:
         if self.controller.mark_stopped() == "already":
             return
-        logger.debug("正在停止...")
+        loguru_logger.debug("正在停止...")
         timeout = self.config.session_close_timeout
         for component, name in [
             (self.req, "session"),
@@ -182,11 +182,11 @@ class BasePc(ABC):
             try:
                 self.exc.submit(component.close(), mode="async", timeout=timeout).result(timeout=timeout)
             except Exception as exc:
-                logger.error(f"{name} 关闭失败: {exc}")
+                loguru_logger.error(f"{name} 关闭失败: {exc}")
         try:
             self.exc.shutdown()
         except Exception as exc:
-            logger.error(f"runtime 关闭失败: {exc}")
+            loguru_logger.error(f"runtime 关闭失败: {exc}")
 
     # ---- 抽象方法（业务层实现） ----
 
