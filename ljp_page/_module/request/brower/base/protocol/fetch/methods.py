@@ -3,12 +3,12 @@ from enum import Enum
 from typing_extensions import TypedDict
 
 from ..base import Command, EmptyParams, EmptyResponse, Response
+from ..network.types import ErrorReason
 from .types import (
     AuthChallengeResponse,
     HeaderEntry,
     RequestPattern,
 )
-from ..network.types import ErrorReason
 
 
 class FetchMethod(str, Enum):

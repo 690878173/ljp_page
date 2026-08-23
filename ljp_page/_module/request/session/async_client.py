@@ -1,139 +1,122 @@
-"""异步会话——基于适配器模式，不硬编码 aiohttp。"""
+"""Asynchronous public HTTP session."""
 
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import time
-from typing import Any, TYPE_CHECKING
+from types import TracebackType
+from typing import Unpack
 
+from . import adapter
+from .adapter.model import BaseAdapter
 from .base import BaseSession
-from .adapter import AiohttpAdapter
-from .config import LjpConfig
-from .models import LjpResponse
-
-
-if TYPE_CHECKING:
-    from .adapter import CurlCffiAdapter,RequestsAdapter
+from .config import SessionConfig
+from .models import RequestArgs, RequestsReponse
+from .types import RequestOptions
 
 _logger = logging.getLogger(__name__)
 
 
 class AsyncSession(BaseSession):
-    """可插拔适配器的异步 HTTP 会话。"""
+    """An async requests-style API backed by aiohttp or curl-cffi adapters."""
 
     @staticmethod
-    def _default_adapter() -> AiohttpAdapter:
-        return AiohttpAdapter()
+    def _default_adapter() -> BaseAdapter:
+        return adapter.AiohttpAdapter()
 
-    def __init__(
-        self,
-        config: LjpConfig | None = None,
-        *,
-        adapter: AiohttpAdapter |CurlCffiAdapter|RequestsAdapter| None = None,
-    ) -> None:
+    def __init__(self, config: SessionConfig | None = None, *, adapter: BaseAdapter | None = None) -> None:
         super().__init__(config, adapter=adapter)
         self._session_lock = asyncio.Lock()
 
-    # ── 生命周期 ──
-
-    async def ensure_session(self) -> Any:
-        if self._session is not None and not self._session.closed:
-            return self._session
-        async with self._session_lock:
-            if self._session is not None and not self._session.closed:
-                return self._session
-            self._session = self._adapter.create_session(
-                headers=self._headers_snapshot,
-                cookies=self._cookies_snapshot,
-                config=self.config,
-            )
-            return self._session
-
-    async def get_native_session(self) -> Any:
-        return await self.ensure_session()
-
-    async def open(self) -> "AsyncSession":
-        await self.ensure_session()
-        return self
-
     @property
     def closed(self) -> bool:
-        return self._session is None or self._session.closed
+        return self.adapter.closed
+
+    async def open(self) -> "AsyncSession":
+        if not self.adapter.closed:
+            return self
+        async with self._session_lock:
+            if self.adapter.closed:
+                opened = self.adapter.open(self.config, {})
+                if inspect.isawaitable(opened):
+                    await opened
+        return self
 
     async def close(self) -> None:
-        await self._close_impl()
-
-    async def _close_impl(self) -> None:
         async with self._session_lock:
-            await self._adapter.close(self._session)
-            self._session = None
+            closing = self.adapter.close()
+            if inspect.isawaitable(closing):
+                await closing
 
     async def __aenter__(self) -> "AsyncSession":
         return await self.open()
 
-    async def __aexit__(self, *args: Any) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
         await self.close()
 
-    # ── 请求 ──
+    async def _send(self, request: RequestArgs) -> RequestsReponse:
+        if self.adapter.is_async:
+            return await self.adapter.send(request)
+        return await asyncio.to_thread(self.adapter.send, request)
 
-    async def request(
-        self,
-        method: str,
-        url: str,
-        *,
-        native_session: Any = None,
-        **kwargs: Any,
-    ) -> LjpResponse:
-        total_start = time.perf_counter()
-        max_retries = max(0, self.config.retry.max_retries)
-        delay = max(0.0, self.config.delay)
+    async def request(self, method: str, url: str, **kwargs: Unpack[RequestOptions]) -> RequestsReponse:
+        started = time.perf_counter()
+        retry_limit = max(0, self.config.Retry.max_retries)
 
-        for attempt in range(max_retries + 1):
-            if attempt > 0 and delay > 0:
-                await asyncio.sleep(delay)
-
-            context = self._build_context(
-                method, url, kwargs, attempt=attempt, native_session=native_session,
-            )
-            session = native_session or await self.ensure_session()
-
+        for attempt in range(retry_limit + 1):
+            if attempt and self.config.Request.delay:
+                await asyncio.sleep(self.config.Request.delay)
+            request = self._build_request_args(method, url, kwargs, attempt=attempt)
+            await self.open()
             try:
-                result = await self._adapter.send(session, context)
+                response = await self._send(request)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
-                mapped = self._adapter.map_exception(exc, context)
-                if attempt >= max_retries or not self._should_retry(exc, mapped):
-                    raise mapped
+                mapped = self.adapter.map_exception(exc, request)
+                if attempt >= retry_limit or not self._should_retry(mapped):
+                    if mapped is exc:
+                        raise
+                    raise mapped from exc
                 retry_delay = self._retry_delay(attempt + 1)
-                if retry_delay > 0:
+                if retry_delay:
                     await asyncio.sleep(retry_delay)
-                self._call_retry_callback()
-                _logger.warning(
-                    "请求重试 [%s %s] attempt=%d/%d",
-                    method.upper(), url, attempt + 1, max_retries,
-                )
+                callback_result = self._retry_callback()
+                if inspect.isawaitable(callback_result):
+                    await callback_result
+                _logger.warning("Retrying %s %s (%d/%d)", request.method, request.url, attempt + 1, retry_limit)
                 continue
+            return self._complete_response(response, elapsed=time.perf_counter() - started, retries=attempt)
 
-            self._persist_response_cookies(result.cookies)
-            return self._build_response(result, context, time.perf_counter() - total_start, attempt)
+        raise RuntimeError("Request retry loop ended unexpectedly")
 
-        raise RuntimeError("异步请求重试流程异常结束")
-
-    # ── 便捷方法 ──
-
-    async def get(self, url: str, **kwargs: Any) -> LjpResponse:
+    async def get(self, url: str, **kwargs: Unpack[RequestOptions]) -> RequestsReponse:
         return await self.request("GET", url, **kwargs)
 
-    async def post(self, url: str, **kwargs: Any) -> LjpResponse:
+    async def post(self, url: str, **kwargs: Unpack[RequestOptions]) -> RequestsReponse:
         return await self.request("POST", url, **kwargs)
 
-    async def put(self, url: str, **kwargs: Any) -> LjpResponse:
+    async def put(self, url: str, **kwargs: Unpack[RequestOptions]) -> RequestsReponse:
         return await self.request("PUT", url, **kwargs)
 
-    async def delete(self, url: str, **kwargs: Any) -> LjpResponse:
+    async def patch(self, url: str, **kwargs: Unpack[RequestOptions]) -> RequestsReponse:
+        return await self.request("PATCH", url, **kwargs)
+
+    async def delete(self, url: str, **kwargs: Unpack[RequestOptions]) -> RequestsReponse:
         return await self.request("DELETE", url, **kwargs)
+
+    async def head(self, url: str, **kwargs: Unpack[RequestOptions]) -> RequestsReponse:
+        return await self.request("HEAD", url, **kwargs)
+
+    async def options(self, url: str, **kwargs: Unpack[RequestOptions]) -> RequestsReponse:
+        return await self.request("OPTIONS", url, **kwargs)
 
 
 __all__ = ["AsyncSession"]

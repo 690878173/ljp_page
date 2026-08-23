@@ -2,8 +2,8 @@ from enum import Enum
 
 from typing_extensions import NotRequired, TypedDict
 
-from base import CDPEvent
-from network.types import (
+from ..base import CDPEvent
+from .types import (
     AssociatedCookie,
     AuthChallenge,
     BlockedReason,

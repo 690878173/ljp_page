@@ -1,11 +1,12 @@
 """流水线配置模型。"""
 
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field, model_validator
 
-from ljp_page.request.session import LjpConfig
+from ljp_page._module.request.brower.playwright import BrowserLaunchConfig
+from ljp_page._module.request.session import SessionConfig
 
 from .enums import PipelineMode
 
@@ -29,8 +30,9 @@ class Config(BaseModel):
         directory_mode: 目录分片模式。
         worker_startup_delay: Worker 启动延迟（秒）。
         queue_get_timeout: 队列取任务超时（秒）。
-        session_close_timeout: Session 关闭超时（秒）。
-        ljp_config: 底层 Ljp 请求配置。
+        session_config: aiohttp/curl-cffi 请求配置。
+        browser_config: 验证浏览器配置；proxy 必须与 session_config.Proxy 一致。
+        http_backend: ``aiohttp`` 或 ``curl_cffi``。
     """
 
     base_url: str = ""
@@ -46,7 +48,7 @@ class Config(BaseModel):
     mode: PipelineMode = PipelineMode.MODE2
 
     max_workers: int = Field(5, ge=1)
-    chapter_concurrency: int = Field(99999999, ge=1)
+    chapter_concurrency: int = Field(20, ge=1)
     max_open_files: int = Field(200, ge=1)
     directory_num: int = Field(100, ge=1)
     directory_mode: str = "mode1"
@@ -54,7 +56,15 @@ class Config(BaseModel):
     queue_get_timeout: float = Field(2.0, gt=0)
     session_close_timeout: float = Field(2.0, gt=0)
 
-    ljp_config: LjpConfig = Field(default_factory=LjpConfig)
+    session_config: SessionConfig = Field(default_factory=SessionConfig)
+    browser_config: BrowserLaunchConfig = Field(default_factory=BrowserLaunchConfig)
+    http_backend: Literal["aiohttp", "curl_cffi"] = "aiohttp"
+    verify_timeout: float = Field(30.0, gt=0)
+    verify_attempts: int = Field(3, ge=1, le=3)
+    verify_poll_interval: float = Field(0.5, gt=0)
+    image_dir: str = "res/images"
+
+    model_config = {"arbitrary_types_allowed": True}
 
     @model_validator(mode="after")
     def _generate_id_list(self) -> "Config":

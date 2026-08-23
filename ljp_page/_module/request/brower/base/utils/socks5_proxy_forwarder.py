@@ -59,7 +59,7 @@ import ipaddress
 import signal
 import struct
 from types import TracebackType
-from ljp_page.logger import loguru_logger
+from ljp_page.logger import logger
 
 __all__ = ['_suppress_closed', 'SOCKS5Forwarder', '_HandshakeError']
 
@@ -177,13 +177,13 @@ class SOCKS5Forwarder:
             addr = None
 
         if addr is not None and not addr.is_loopback:
-            loguru_logger.warning(
+            logger.warning(
                 'Binding to non-loopback address %s — the forwarder will be '
                 'accessible from the network without authentication!',
                 self.local_host,
             )
         elif addr is None and self.local_host != 'localhost':
-            loguru_logger.debug(
+            logger.debug(
                 'local_host=%r is not an IP literal; skipping loopback check',
                 self.local_host,
             )
@@ -202,7 +202,7 @@ class SOCKS5Forwarder:
                 'or specify --local-port explicitly.'
             )
         self.local_port = ports.pop()
-        loguru_logger.info(
+        logger.info(
             'SOCKS5 forwarder listening on %s:%s -> %s:%s',
             self.local_host,
             self.local_port,
@@ -216,7 +216,7 @@ class SOCKS5Forwarder:
             self._server.close()
             await self._server.wait_closed()
             self._server = None
-            loguru_logger.info('SOCKS5 forwarder stopped')
+            logger.info('SOCKS5 forwarder stopped')
 
     async def serve_forever(self) -> None:
         """阻止直到服务器关闭（对于 CLI 模式有用）。"""
@@ -254,16 +254,16 @@ class SOCKS5Forwarder:
                 _pipe(r_reader, client_writer, 'remote->client'),
             )
         except _HandshakeError as exc:
-            loguru_logger.warning('Handshake failed: %s', exc)
+            logger.warning(f'Handshake failed: {exc}')
             if exc.send_reply:
                 with _suppress_closed():
                     await self._send_reply(client_writer, exc.reply_code)
         except asyncio.TimeoutError:
-            loguru_logger.warning('Connection to remote proxy timed out')
+            logger.warning('Connection to remote proxy timed out')
             with _suppress_closed():
                 await self._send_reply(client_writer, REPLY_GENERAL_FAILURE)
         except (ConnectionRefusedError, OSError) as exc:
-            loguru_logger.warning('Connection to remote proxy failed: %s', exc)
+            logger.warning(f'Connection to remote proxy failed: {exc}')
             reply = (
                 REPLY_CONNECTION_REFUSED
                 if isinstance(exc, ConnectionRefusedError)
@@ -274,7 +274,7 @@ class SOCKS5Forwarder:
         except asyncio.CancelledError:
             raise
         except Exception:
-            loguru_logger.exception('Unexpected error in client handler')
+            logger.exception('Unexpected error in client handler')
         finally:
             await _close_writer(client_writer)
             if remote_writer is not None:
@@ -325,7 +325,7 @@ class SOCKS5Forwarder:
         atyp = req[3]
         addr_payload = await self._read_raw_address(reader, atyp, peer='client')
         dest_port = struct.unpack('!H', await _read_exact(reader, 2, peer='client'))[0]
-        loguru_logger.debug('Client CONNECT to %s port %d', addr_payload.hex(), dest_port)
+        logger.debug(f'Client CONNECT to {addr_payload.hex()} port {dest_port}')
         return addr_payload, dest_port
 
     async def _remote_handshake(
@@ -343,10 +343,10 @@ class SOCKS5Forwarder:
         greeting = bytes([SOCKS5_VERSION, 0x02, AUTH_NO_AUTH, AUTH_USERNAME_PASSWORD])
         writer.write(greeting)
         await writer.drain()
-        loguru_logger.debug('-> greeting: %s', greeting.hex())
+        logger.debug(f'-> greeting: {greeting.hex()}')
 
         resp = await _read_exact(reader, 2, peer='remote proxy')
-        loguru_logger.debug('<- method selection: %s', resp.hex())
+        logger.debug(f'<- method selection: {resp.hex()}')
 
         if resp[0] != SOCKS5_VERSION:
             raise _HandshakeError(f'Remote proxy bad version (response: {resp.hex()})')
@@ -361,16 +361,16 @@ class SOCKS5Forwarder:
             auth_req = bytes([0x01, len(uname)]) + uname + bytes([len(passwd)]) + passwd
             writer.write(auth_req)
             await writer.drain()
-            loguru_logger.debug('-> auth request: ulen=%d plen=%d', len(uname), len(passwd))
+            logger.debug(f'-> auth request: ulen={len(uname)} plen={len(passwd)}')
 
             auth_resp = await _read_exact(reader, 2, peer='remote proxy')
-            loguru_logger.debug('<- auth response: %s', auth_resp.hex())
+            logger.debug(f'<- auth response: {auth_resp.hex()}')
             if auth_resp[1] != 0x00:
                 raise _HandshakeError(
                     f'Remote proxy authentication failed (status: {auth_resp[1]:#04x})'
                 )
         elif selected_method == AUTH_NO_AUTH:
-            loguru_logger.debug('Remote proxy selected no-auth (0x00)')
+            logger.debug('Remote proxy selected no-auth (0x00)')
         else:
             raise _HandshakeError(
                 f'Remote proxy selected unsupported method: {selected_method:#04x}'
@@ -381,10 +381,10 @@ class SOCKS5Forwarder:
         connect_req += struct.pack('!H', dest_port)
         writer.write(connect_req)
         await writer.drain()
-        loguru_logger.debug('-> CONNECT: %s', connect_req.hex())
+        logger.debug(f'-> CONNECT: {connect_req.hex()}')
 
         reply_header = await _read_exact(reader, 4, peer='remote proxy')
-        loguru_logger.debug('<- reply header: %s', reply_header.hex())
+        logger.debug(f'<- reply header: {reply_header.hex()}')
 
         rep = reply_header[1]
         if rep != REPLY_SUCCESS:
@@ -511,14 +511,14 @@ async def _main(args: argparse.Namespace) -> None:
     except NotImplementedError:
         pass  #Windows / ProactorEventLoop — 回退到 KeyboardInterrupt
 
-    loguru_logger.info(
+    logger.info(
         'Forwarding socks5://127.0.0.1:%s -> socks5://%s:***@%s:%s',
         forwarder.local_port,
         args.username,
         args.remote_host,
         args.remote_port,
     )
-    loguru_logger.info('Press Ctrl+C to stop.')
+    logger.info('Press Ctrl+C to stop.')
 
     try:
         await stop
@@ -536,13 +536,13 @@ async def _test_negotiate_auth(
     greeting = bytes([SOCKS5_VERSION, 0x02, AUTH_NO_AUTH, AUTH_USERNAME_PASSWORD])
     writer.write(greeting)
     await writer.drain()
-    loguru_logger.info('-> Greeting:  %s', greeting.hex())
+    logger.info(f'-> Greeting:  {greeting.hex()}')
 
     resp = await asyncio.wait_for(reader.readexactly(2), timeout=10)
-    loguru_logger.info('<- Method:    %s  (selected method: %#04x)', resp.hex(), resp[1])
+    logger.info(f'<- Method:    {resp.hex()}  (selected method: {resp[1]:#04x})')
 
     if resp[0] != SOCKS5_VERSION:
-        loguru_logger.error('Bad version byte: %#04x', resp[0])
+        logger.error(f'Bad version byte: {resp[0]:#04x}')
         return False
 
     if resp[1] == AUTH_USERNAME_PASSWORD:
@@ -551,18 +551,18 @@ async def _test_negotiate_auth(
         auth_req = bytes([0x01, len(uname)]) + uname + bytes([len(passwd)]) + passwd
         writer.write(auth_req)
         await writer.drain()
-        loguru_logger.info('-> Auth:      ulen=%d plen=%d', len(uname), len(passwd))
+        logger.info(f'-> Auth:      ulen={len(uname)} plen={len(passwd)}')
 
         auth_resp = await asyncio.wait_for(reader.readexactly(2), timeout=10)
-        loguru_logger.info('<- Auth resp: %s  (status: %#04x)', auth_resp.hex(), auth_resp[1])
+        logger.info(f'<- Auth resp: {auth_resp.hex()}  (status: {auth_resp[1]:#04x})')
         if auth_resp[1] != 0x00:
-            loguru_logger.error('Authentication rejected')
+            logger.error('Authentication rejected')
             return False
-        loguru_logger.info('Authentication succeeded')
+        logger.info('Authentication succeeded')
     elif resp[1] == AUTH_NO_AUTH:
-        loguru_logger.info('Proxy selected no-auth')
+        logger.info('Proxy selected no-auth')
     elif resp[1] == AUTH_NO_ACCEPTABLE:
-        loguru_logger.error('Proxy rejected all auth methods')
+        logger.error('Proxy rejected all auth methods')
         return False
 
     return True
@@ -581,10 +581,10 @@ async def _test_connect_and_verify(
     )
     writer.write(connect_req)
     await writer.drain()
-    loguru_logger.info('-> CONNECT:   %s  (httpbin.org:80)', connect_req.hex())
+    logger.info(f'-> CONNECT:   {connect_req.hex()}  (httpbin.org:80)')
 
     reply = await asyncio.wait_for(reader.readexactly(4), timeout=15)
-    loguru_logger.info('<- Reply:     %s  (rep: %#04x)', reply.hex(), reply[1])
+    logger.info(f'<- Reply:     {reply.hex()}  (rep: {reply[1]:#04x})')
 
     if reply[1] != REPLY_SUCCESS:
         extra = b''
@@ -592,33 +592,33 @@ async def _test_connect_and_verify(
             extra = await asyncio.wait_for(reader.read(256), timeout=1)
         except (asyncio.TimeoutError, OSError):
             pass
-        loguru_logger.error('CONNECT rejected — reply code %#04x', reply[1])
+        logger.error(f'CONNECT rejected — reply code {reply[1]:#04x}')
         if extra:
-            loguru_logger.error('Extra data: %s', extra.hex())
-        loguru_logger.error(
+            logger.error(f'Extra data: {extra.hex()}')
+        logger.error(
             'Possible causes: invalid/expired credentials, quota exceeded, '
             'IP not whitelisted, or wrong port'
         )
         return False
 
     await _skip_bnd_address(reader, reply[3], peer='remote proxy')
-    loguru_logger.info('CONNECT established')
+    logger.info('CONNECT established')
 
     http_req = b'GET /ip HTTP/1.1\r\nHost: httpbin.org\r\nConnection: close\r\n\r\n'
     writer.write(http_req)
     await writer.drain()
-    loguru_logger.info('-> HTTP GET /ip sent')
+    logger.info('-> HTTP GET /ip sent')
 
     http_resp = await asyncio.wait_for(reader.read(4096), timeout=15)
     decoded = http_resp.decode(errors='replace')
-    loguru_logger.info('<- HTTP response (%d bytes):\n%s', len(http_resp), decoded)
-    loguru_logger.info('Proxy is fully working!')
+    logger.info(f'<- HTTP response ({len(http_resp)} bytes):\n{decoded}')
+    logger.info('Proxy is fully working!')
     return True
 
 
 async def _test_proxy(args: argparse.Namespace) -> None:
     """对远程代理执行直接 SOCKS5 握手测试。"""
-    loguru_logger.info('=== SOCKS5 Direct Test: %s:%s ===', args.remote_host, args.remote_port)
+    logger.info(f'=== SOCKS5 Direct Test: {args.remote_host}:{args.remote_port} ===')
 
     try:
         reader, writer = await asyncio.wait_for(
@@ -626,26 +626,26 @@ async def _test_proxy(args: argparse.Namespace) -> None:
             timeout=HANDSHAKE_TIMEOUT,
         )
     except asyncio.TimeoutError:
-        loguru_logger.error('TCP connection timed out')
+        logger.error('TCP connection timed out')
         return
     except OSError as exc:
-        loguru_logger.error('TCP connection failed: %s', exc)
+        logger.error(f'TCP connection failed: {exc}')
         return
 
-    loguru_logger.info('TCP connection established')
+    logger.info('TCP connection established')
 
     try:
         if not await _test_negotiate_auth(reader, writer, args.username, args.password):
             return
         await _test_connect_and_verify(reader, writer)
     except _HandshakeError as exc:
-        loguru_logger.error('SOCKS5 test failed: %s', exc)
+        logger.error(f'SOCKS5 test failed: {exc}')
     except asyncio.TimeoutError:
-        loguru_logger.error('Timed out waiting for proxy response')
+        logger.error('Timed out waiting for proxy response')
     except asyncio.IncompleteReadError as exc:
-        loguru_logger.error('Connection closed prematurely (got %d bytes)', len(exc.partial))
+        logger.error(f'Connection closed prematurely (got {len(exc.partial)} bytes)')
     except OSError as exc:
-        loguru_logger.error('Network error: %s', exc)
+        logger.error(f'Network error: {exc}')
     finally:
         await _close_writer(writer)
 

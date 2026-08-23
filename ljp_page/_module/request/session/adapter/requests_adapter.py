@@ -1,132 +1,109 @@
-"""requests 同步适配器。"""
+"""requests backend adapter."""
 
 from __future__ import annotations
 
-from typing import Any, TYPE_CHECKING
+from typing import Mapping
 
 import requests
 
-from ljp_page._core.exceptions import NetworkException, TimeoutException
+from ljp_page._core.exceptions import LjpBaseException, NetworkException, TimeoutException
 
-from .model import BaseHttpAdapter
-
-if TYPE_CHECKING:
-    from ...config import LjpConfig
-    from ..models import AdapterResult, RequestContext
+from .model import BaseAdapter
+from ..config import SessionConfig
+from ..models import RequestArgs, RequestsReponse
 
 
-class RequestsAdapter(BaseHttpAdapter):
-    """requests 适配器——管理 Session / 异常映射。"""
+class RequestsAdapter(BaseAdapter):
+    """Owns a ``requests.Session`` used solely for connection reuse and cookies."""
 
-    # ── 创建/关闭 session ──
+    def __init__(self) -> None:
+        self._session: requests.Session | None = None
+        self._cookies: dict[str, str] = {}
 
-    @staticmethod
-    def create_session(
-        headers: dict[str, str],
-        cookies: dict[str, str],
-        config: "LjpConfig",
-    ) -> requests.Session:
+    @property
+    def closed(self) -> bool:
+        return self._session is None
+
+    def open(self, config: SessionConfig, cookies: Mapping[str, str]) -> None:
+        if self._session is not None:
+            return
         session = requests.Session()
-        session.headers.update(headers)
-        session.cookies.update(cookies)
-        session.trust_env = config.trust_env
-        session.verify = config.verify_ssl
-        proxies = config.proxy.as_requests()
-        if proxies:
-            session.proxies.update(proxies)
-        return session
+        session.headers.clear()  # RequestArgs.headers is the only header source.
+        session.trust_env = config.Request.trust_env
+        session.cookies.update(self._cookies)
+        self._session = session
 
-    @staticmethod
-    def close(session: requests.Session | None) -> None:
-        if session is not None:
-            session.close()
+    def close(self) -> None:
+        if self._session is not None:
+            self._cookies = self._session.cookies.get_dict()
+            self._session.close()
+            self._session = None
 
-    # ── 发送 ──
+    def send(self, request: RequestArgs) -> RequestsReponse:
 
-    @staticmethod
-    def send(
-        session: requests.Session,
-        context: "RequestContext",
-    ) -> "AdapterResult":
-        from ..models import AdapterResult
-
-        if context.cookies:
-            session.cookies.update(context.cookies)
-
-        passthrough = {
-            k: v for k, v in context.extra.items()
-            if k != "native_session"
-        }
-
+        if self._session is None:
+            raise RuntimeError("RequestsAdapter is not open")
         try:
-            resp = session.request(
-                context.method,
-                context.url,
-                params=context.params,
-                data=context.data,
-                json=context.json_data,
-                headers=context.headers,
-                timeout=context.timeout,
-                allow_redirects=context.allow_redirects,
-                verify=context.verify_ssl,
-                proxies=context.proxies,
-                stream=context.stream,
-                **passthrough,
+            response = self._session.request(
+                method=request.method,
+                url=request.url,
+                params=request.params,
+                data=request.data,
+                json=request.json_data,
+                headers=dict(request.headers),
+                cookies=dict(request.cookies) if request.cookies else None,
+                timeout=request.timeout,
+                allow_redirects=request.allow_redirects,
+                verify=request.verify_ssl,
+                proxies=dict(request.proxies) if request.proxies else None,
+                stream=request.stream,
+                **dict(request.extra),
             )
         except Exception as exc:
-            raise RequestsAdapter.map_exception(exc, context) from exc
+            raise self.map_exception(exc, request) from exc
 
-        return AdapterResult(
-            status_code=resp.status_code,
-            headers=dict(resp.headers),
-            content=resp.content,
-            encoding=resp.encoding,
-            cookies=RequestsAdapter.extract_cookies(session),
+        return RequestsReponse(
+            request_args=request,
+            status_code=response.status_code,
+            url=response.url,
+            headers=dict(response.headers),
+            content=response.content,
+            encoding=response.encoding,
+            cookies=self.get_cookies(),
+            history=tuple(item.url for item in response.history),
         )
 
-    # ── Cookie 提取 ──
+    def get_cookies(self) -> dict[str, str]:
+        if self._session is None:
+            return dict(self._cookies)
+        return self._session.cookies.get_dict()
+
+    def set_cookies(self, cookies: Mapping[str, str]) -> None:
+        self._cookies = dict(cookies)
+        if self._session is not None:
+            self._session.cookies.clear()
+            self._session.cookies.update(self._cookies)
+
+    def update_cookies(self, cookies: Mapping[str, str]) -> None:
+        self._cookies.update(cookies)
+        if self._session is not None:
+            self._session.cookies.update(cookies)
+
+    def clear_cookies(self) -> None:
+        self._cookies.clear()
+        if self._session is not None:
+            self._session.cookies.clear()
 
     @staticmethod
-    def extract_cookies(session: requests.Session) -> dict[str, str]:
-        return session.cookies.get_dict()
-
-    # ── Header/Cookie 同步 ──
-
-    @staticmethod
-    def update_headers(session: requests.Session | None, headers: dict[str, str]) -> None:
-        if session is not None:
-            session.headers.clear()
-            session.headers.update(headers)
-
-    @staticmethod
-    def update_cookies(session: requests.Session | None, cookies: dict[str, str]) -> None:
-        if session is not None:
-            session.cookies.clear()
-            session.cookies.update(cookies)
-
-    # ── 异常映射 ──
-
-    @staticmethod
-    def map_exception(exc: Exception, context: "RequestContext") -> Exception:
-        if isinstance(exc, (TimeoutException, NetworkException)):
+    def map_exception(exc: Exception, request: RequestArgs) -> Exception:
+        if isinstance(exc, LjpBaseException):
             return exc
-
-        ctx = {"method": context.method, "url": context.url, "attempt": context.attempt}
-
+        context = {"method": request.method, "url": request.url, "attempt": request.attempt}
         if isinstance(exc, requests.Timeout):
-            return TimeoutException("同步请求超时", timeout=sum(context.timeout), e=exc, context=ctx)
-
-        if isinstance(exc, requests.exceptions.ProxyError):
-            return NetworkException("代理连接失败", url=context.url, e=exc, context=ctx)
-
-        if isinstance(exc, requests.exceptions.SSLError):
-            return NetworkException("SSL 连接失败", url=context.url, e=exc, context=ctx)
-
-        status = getattr(getattr(exc, "response", None), "status_code", None)
+            return TimeoutException("HTTP request timed out", timeout=sum(request.timeout), context=context)
         if isinstance(exc, requests.RequestException):
-            return NetworkException("同步请求失败", url=context.url, status_code=status, e=exc, context=ctx)
-
-        return exc
+            return NetworkException("HTTP request failed", url=request.url, context=context)
+        return NetworkException("HTTP backend failed", url=request.url, context=context)
 
 
 __all__ = ["RequestsAdapter"]

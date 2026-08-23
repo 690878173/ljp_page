@@ -13,7 +13,7 @@ cookie = {}
 bt_url = ''
 
 async def cf(url):
-    from ljp_page.request.edge.pydoll import Edge, CookieParam, ChromiumOptions
+    from ljp_page.request.browser.pydoll import Edge, CookieParam, ChromiumOptions
     profile_dir = (Path.cwd() / "edge_profile").resolve()
     profile_dir.mkdir(parents=True, exist_ok=True)
 

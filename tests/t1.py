@@ -1,18 +1,18 @@
 import asyncio
 
-from ljp_page._module.request.session import ASession
+from ljp_page._module.request.session import AsyncSessionPool
 from ljp_page._module.runtime.exc import LJPExc
 
-session = ASession()
+session = AsyncSessionPool()
 
 exc = LJPExc()
 async def checker(res):
     # print(f'checker: {res}')
-    return True
+    return False
 
 async def handler(res):
     print(f'handler:{res}')
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.001)
     print(f'handler:验证完成')
     return True
 
@@ -47,7 +47,7 @@ async def main():
 
     await exc.submit(session.close())
     exc.shutdown()
-from ljp_page.request import ASession
+from ljp_page.request import AsyncSession
 
 if __name__ == '__main__':
     asyncio.run(main())

@@ -1,7 +1,7 @@
 from typing_extensions import NotRequired, TypedDict
 
-from browser.types import BrowserContextID
-from page.types import FrameId
+from ..browser.types import BrowserContextID
+from ..page.types import FrameId
 
 TargetID = str
 SessionID = str

@@ -2,21 +2,19 @@
 
 from __future__ import annotations
 
-import asyncio
 from abc import ABC, abstractmethod
 from typing import Any
 
 from ljp_page._core.utils.other import f_mark
 from ljp_page._module.runtime import LJPExc
-from ljp_page.logger import loguru_logger
+from ljp_page.logger import logger
 
 from .config import Config
 from .controller import LifecycleController
 from .enums import PipelineMode
 from .file_manager import FileManager
-from .models import P1Item, P1Result, P2Item, P2Result, P3Item
+from .models import P1Item, P1Result, P2Result
 from .parser import HtmlParser
-from .request import BaseRequest, RequestManager
 from .scheduler import PipelineScheduler
 
 
@@ -45,7 +43,7 @@ class BasePc(ABC):
         self.controller = LifecycleController()
 
         # 运行时
-        self.exc = LJPExc(loguru_logger)
+        self.exc = LJPExc()
         self.exc.set_semaphore("sem2", config.chapter_concurrency)
 
         # 组件
@@ -53,11 +51,9 @@ class BasePc(ABC):
         self.parser_manager = HtmlParser(self.exc)
 
         # 请求管理器（回调绑定反爬）
-        self.req = RequestManager(
-            config=config,
-            on_verify_check=self.check_meet_fp,
-            on_verify_handle=self.fp_do,
-        )
+        # Concrete collectors own their transport. This keeps the base layer
+        # independent from a specific HTTP backend or browser implementation.
+        self.req: Any = None
 
         # 调度器（回调绑定业务逻辑）
         self.scheduler = PipelineScheduler(
@@ -128,9 +124,9 @@ class BasePc(ABC):
             return res
         try:
             res.result()
-            loguru_logger.info("所有任务完成")
+            logger.info("所有任务完成")
         except KeyboardInterrupt:
-            loguru_logger.warning("用户中断")
+            logger.warning("用户中断")
             return None
         finally:
             self._stop()
@@ -141,7 +137,7 @@ class BasePc(ABC):
         await self.before_run()
         handler = self._mode_handlers.get(self.config.mode)
         if handler is None:
-            loguru_logger.error(f"未知模式: {self.config.mode}")
+            logger.error(f"未知模式: {self.config.mode}")
             return
         await handler()
         await self.after_run()
@@ -161,11 +157,11 @@ class BasePc(ABC):
 
     def pause(self) -> None:
         self.controller.pause()
-        loguru_logger.info("任务暂停")
+        logger.info("任务暂停")
 
     def resume(self) -> None:
         self.controller.resume()
-        loguru_logger.info("任务继续")
+        logger.info("任务继续")
 
     def close(self) -> None:
         self._stop()
@@ -173,20 +169,24 @@ class BasePc(ABC):
     def _stop(self) -> None:
         if self.controller.mark_stopped() == "already":
             return
-        loguru_logger.debug("正在停止...")
+        logger.debug("正在停止...")
         timeout = self.config.session_close_timeout
         for component, name in [
-            (self.req, "session"),
+            (self.req, "request transport"),
             (self.file_manager, "file manager"),
         ]:
+            if component is None:
+                continue
             try:
-                self.exc.submit(component.close(), mode="async", timeout=timeout).result(timeout=timeout)
+                self.exc.submit(component.close(), mode="async", timeout=timeout).result(
+                    timeout=timeout
+                )
             except Exception as exc:
-                loguru_logger.error(f"{name} 关闭失败: {exc}")
+                logger.error(f"{name} 关闭失败: {exc}")
         try:
             self.exc.shutdown()
         except Exception as exc:
-            loguru_logger.error(f"runtime 关闭失败: {exc}")
+            logger.error(f"runtime 关闭失败: {exc}")
 
     # ---- 抽象方法（业务层实现） ----
 

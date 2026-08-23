@@ -4,8 +4,10 @@ from ljp_page._core.utils.lazy_import import bind_lazy_exports
 
 if TYPE_CHECKING:
     from .browser import *  # noqa: F403
+    from .cdp import *  # noqa: F403
     from .config import *  # noqa: F403
     from .context import *  # noqa: F403
+    from .fingerprint import *  # noqa: F403
     from .page import *  # noqa: F403
     from .request import *  # noqa: F403
     from .script import *  # noqa: F403

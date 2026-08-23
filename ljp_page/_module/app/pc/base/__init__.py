@@ -1,22 +1,16 @@
-from typing import TYPE_CHECKING
+"""Public base contracts for PC collectors."""
 
-from ljp_page._core.utils.lazy_import import bind_lazy_exports
+from .config import Config
+from .controller import LifecycleController
+from .enums import PipelineMode
+from .executor import BasePc
+from .file_manager import FileManager
+from .models import P1Item, P1Result, P2Item, P2Result, P3Item
+from .parser import HtmlParser
+from .scheduler import PipelineScheduler
 
-if TYPE_CHECKING:
-    from .config import Config as Config
-    from .controller import LifecycleController as LifecycleController
-    from .enums import PipelineMode as PipelineMode
-    from .executor import BasePc as BasePc
-    from .file_manager import FileManager as FileManager
-    from .models import (
-        P1Item as P1Item,
-        P1Result as P1Result,
-        P2Item as P2Item,
-        P2Result as P2Result,
-        P3Item as P3Item,
-    )
-    from .parser import HtmlParser as HtmlParser
-    from .request import BaseRequest as BaseRequest, RequestManager as RequestManager
-    from .scheduler import PipelineScheduler as PipelineScheduler
-
-__getattr__, __all__ = bind_lazy_exports(__name__, __file__)
+__all__ = [
+    "BasePc", "Config", "FileManager", "HtmlParser",
+    "LifecycleController", "P1Item", "P1Result", "P2Item", "P2Result",
+    "P3Item", "PipelineMode", "PipelineScheduler",
+]

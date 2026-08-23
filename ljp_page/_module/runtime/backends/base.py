@@ -3,8 +3,6 @@ from __future__ import annotations
 from concurrent.futures import Future
 from typing import Any, TYPE_CHECKING
 
-from ljp_page._core.base import Ljp_BaseClass_Logger
-
 __all__ = ['BaseBackend']
 
 if TYPE_CHECKING:
@@ -12,7 +10,7 @@ if TYPE_CHECKING:
     from ljp_page._module.runtime.task import TaskSubmitConfig
 
 
-class BaseBackend(Ljp_BaseClass_Logger):
+class BaseBackend:
     """统一后端基类。"""
 
     mode_name = "base"

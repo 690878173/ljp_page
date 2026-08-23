@@ -2,11 +2,11 @@ from enum import Enum
 
 from typing_extensions import NotRequired, TypedDict
 
-from base import Command, EmptyParams, EmptyResponse, Response
-from debugger.types import SearchMatch
-from emulation.types import UserAgentMetadata
-from fetch.types import HeaderEntry, RequestPattern
-from network.types import (
+from ..base import Command, EmptyParams, EmptyResponse, Response
+from ..debugger.types import SearchMatch
+from ..emulation.types import UserAgentMetadata
+from ..fetch.types import HeaderEntry, RequestPattern
+from .types import (
     ConnectionType,
     ContentEncoding,
     Cookie,

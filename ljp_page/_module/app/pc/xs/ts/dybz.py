@@ -4,22 +4,15 @@ from pathlib import Path
 from urllib.parse import urljoin
 
 from ljp_page._core.exceptions import LjpBaseException
-from ljp_page._module.app.pc.base import Config
-from ljp_page._module.request.html import Html
-from ljp_page._module.app.pc.base import P1Item, P1Result, P2Item, P2Result, P3Item
+from ljp_page._module.app.pc.base import Config, P1Item, P1Result, P2Item, P2Result, P3Item
 from ljp_page._module.app.pc.xs.xs import Xs
-from ljp_page.logger import loguru_logger
-
 from ljp_page._module.ocr import Ocr
+from ljp_page._module.request.html import Html
+from ljp_page.logger import logger
 
 ocr = Ocr()
 
-from ljp_page._module.request.brower.playwright import Playwright
-
-from ljp_page._module.app.pc.base.request import BaseRequest
-
-
-class Pc_Ocr:
+class PcOcr:
     def __init__(self,pc):
         self.pc = pc
         self.ocr_cache_path = Path("res/res_data/ocr_cache.json")
@@ -65,15 +58,19 @@ class Pc_Ocr:
                 parts.append("\n")
 
             elif child.tag in {"img", "a"}:
-                img_url = child.get("src", "").strip() if child.tag == "img" else child.get("href", "").strip()
+                img_url = (
+                    child.get("src", "").strip()
+                    if child.tag == "img"
+                    else child.get("href", "").strip()
+                )
 
                 if img_url:
                     if self.check_img(img_url):
                         line.append(self.check_img(img_url))
                     else:
-                        im_url = self.pc.config.base_url + img_url
+                        im_url = urljoin(self.pc.config.base_url, img_url)
 
-                        handle = asyncio.create_task(self.pc.req.get_png(im_url))
+                        handle = asyncio.create_task(self.pc.req.get_image(im_url))
 
                         line.append([handle,img_url])
 
@@ -99,7 +96,7 @@ class Pc_Ocr:
                         res = await item[0]
                         text = self.ocr_img(res)
                         self.ocr_cache[item[1]] = text
-                        print(f'添加：{item[1]}:{text}')
+                        logger.debug(f"OCR 识别完成: {item[1]} -> {text}")
                         self.ocr_img_dic_count += 1
                         if self.ocr_img_dic_count % 10 == 0:
                             self.ocr_cache_path.write_text(
@@ -108,7 +105,7 @@ class Pc_Ocr:
                             )
 
                     except Exception as e:
-                        print(f"OCR 识别失败: {e}")
+                        logger.warning(f"OCR 识别失败: {e}")
                         text = "[图片]"
 
                     current_line.append(text)
@@ -119,78 +116,16 @@ class Pc_Ocr:
         return "\n".join(line for line in result_lines if line is not None).replace('\n\n','\n')
 
 
-class Request(BaseRequest):
-
-    async def close(self):
-        while not self.page_queue.empty():
-            try:
-                page = await self.page_queue.get()
-                await page.close()
-            except Exception as e:
-                print(e)
-                continue
-        await self.edge.close()
-
-    def __init__(self,own,config,logger=None):
-        self.edge = Playwright()
-        self.own = own
-
-        self.page_queue = asyncio.Queue()
-
-    async def init(self):
-        await self.edge.start()
-        page_ls = await self.edge.new_pages(4)
-        for page in page_ls:
-            await page.goto(self.own.config.base_url)
-            await page.cf()
-            self.page_queue.put_nowait(page)
-
-    async def get_page(self):
-        """轮询取得页面；普通 CDP 请求允许并发，验证刷新由门闸统一协调。"""
-
-        page = await self.page_queue.get()
-        await self.page_queue.put(page)
-        return page
-
-    async def get(self,url,**kwargs):
-        while True:
-            page = await self.get_page()
-            try:
-                res = await page.cdp_request.get(
-                    url,
-                    verify_max_retries=3,
-                    cf_time_to_wait_captcha=10,
-                )
-                content_bytes = bytes(res["content"])
-                return content_bytes.decode("gbk", errors="replace")
-            except Exception as e:
-                if "Execution context was destroyed" in str(e):
-                    print("✅ 捕获到页面跳转错误，已处理")
-                print(f"请求失败，等待后重试: {e}")
-            await asyncio.sleep(10)
-
-    async def get_png(self,url):
-        page = await self.get_page()
-        res = await page.cdp_request.get(
-            url,
-            verify_max_retries=3,
-            cf_time_to_wait_captcha=10,
-        )
-        return bytes(res["content"])
-
 class Md(Xs):
-    _Request_Manager = Request
-
-
     def __init__(self,config,ui=None):
         super().__init__(config,ui)
-        self.ocr = Pc_Ocr(self)
+        self.ocr = PcOcr(self)
 
     def check_name(self,name):
         no_in_ls = ['绿', '近代现代', 'GL百合','[穿越重生]','[BL同人]','[古代架空]']
         for no in no_in_ls:
             if no in name:
-                loguru_logger.warning(f'跳过->{name}')
+                logger.warning(f'跳过->{name}')
                 return None
         return name
 
@@ -210,9 +145,8 @@ class Md(Xs):
         return urljoin(base, link)
 
     async def check_meet_fp(self, res):
-        l = ['Just a moment...','请稍候…']
-        for i in l:
-            if i in res:
+        for marker in ("Just a moment...", "请稍候…"):
+            if marker in res:
                 return True
         return False
 
@@ -222,14 +156,14 @@ class Md(Xs):
     def parse_p1(self, res, url: str) -> P1Result:
         try:
             res_html = res
-            # print(res)
-            # print(res.text)
             html = Html.drop_xml(res_html)
             links = html.xpath("//a[@class='name']")
             ls = [
                 (
                     ''.join(link.xpath('.//text()')).strip(),  # 文本转字符串
-                    link.xpath('./@href')[0].strip() if link.xpath('./@href') else ''  # 链接取第一个
+                    link.xpath('./@href')[0].strip()
+                    if link.xpath('./@href')
+                    else ''  # 链接取第一个
                 )
                 for link in links if link is not None
             ]
@@ -239,11 +173,9 @@ class Md(Xs):
             next_btn = html.xpath("/html/body/div[3]/div[3]/div/a[5]/@href")
             if next_btn:
                 next_url = self._to_absolute(url, next_btn[0])
-            return P1Result(
-                items=items
-            )
+            return P1Result(items=items, next_url=next_url)
         except Exception as e:
-            raise LjpBaseException(message=f'出错') from e
+            raise LjpBaseException(message='出错') from e
 
     def parse_p2(self, res_html: str, url: str):
         try:
@@ -252,10 +184,14 @@ class Md(Xs):
             # title_tag = html.xpath("/html/head/title/text()")
             # if title_tag and "not found" in title_tag[0].lower():
             #     raise ValueError(f"resource not found: {url}")
-            title = self._clean_text(html.xpath("/html/body/div[3]/div[2]/div[1]/div[2]/h1/text()")[0])
+            title = self._clean_text(
+                html.xpath("/html/body/div[3]/div[2]/div[1]/div[2]/h1/text()")[0]
+            )
 
             author = "unknown"
-            description = self._clean_text("".join(html.xpath("/html/body/div[3]/div[3]/div/text()")))
+            description = self._clean_text(
+                "".join(html.xpath("/html/body/div[3]/div[3]/div/text()"))
+            )
 
             items = []
             p3items = []
@@ -289,7 +225,7 @@ class Md(Xs):
                 next_url=next_url
             )
         except Exception as e:
-            raise LjpBaseException(message=f'出错') from e
+            raise LjpBaseException(message='出错') from e
 
     async def parse_p3(self, res_html: str, url: str):
         try:
@@ -303,14 +239,17 @@ class Md(Xs):
             content_nodes = html.xpath('//div[@class="page-content font-large"]/p')[0]
             content = await self.ocr.get_content_by_br(content_nodes)
             # content = "\n".join(self._clean_text(i) for i in content_nodes if i)
-    
-            next_rel = html.xpath('//center[@class="chapterPages"]/a[@class="curr"]/following-sibling::a[1]/@href')
+
+            next_rel = html.xpath(
+                '//center[@class="chapterPages"]/a[@class="curr"]/'
+                'following-sibling::a[1]/@href'
+            )
             next_url = self._to_absolute(url, next_rel[0]) if next_rel else None
 
             return P3Item(url=url,name=title,content=content,next_url=next_url)
         except Exception as e:
-            loguru_logger.error(e)
-            raise LjpBaseException(message=f'出错') from e
+            logger.error(e)
+            raise LjpBaseException(message='出错') from e
 
 if __name__ == '__main__':
      md = Md(config=Config(mode='mode1',

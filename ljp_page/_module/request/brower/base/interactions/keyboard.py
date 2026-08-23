@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from ljp_page.logger import loguru_logger
+from ljp_page.logger import logger
 import random
 import warnings
 from dataclasses import dataclass
@@ -115,7 +115,7 @@ class Keyboard:
         示例：
             等待 tab.keyboard.press(Key.ENTER)
             等待 tab.keyboard.press(Key.A, 修饰符=KeyModifier.CTRL)"""
-        loguru_logger.info(f'Pressing key: {key} with modifiers: {modifiers}')
+        logger.info(f'Pressing key: {key} with modifiers: {modifiers}')
         await self.down(key, modifiers)
         await asyncio.sleep(interval)
         await self.up(key)
@@ -127,7 +127,7 @@ class Keyboard:
             key：按下的键（来自 Key 枚举）。
             修饰符：可选的键修饰符。"""
         key_name, code = key
-        loguru_logger.debug(f'Key down: {key_name}')
+        logger.debug(f'Key down: {key_name}')
         command = InputCommands.dispatch_key_event(
             type=KeyEventType.KEY_DOWN,
             key=key_name,
@@ -143,7 +143,7 @@ class Keyboard:
         参数：
             key：释放的键（来自 Key 枚举）。"""
         key_name, code = key
-        loguru_logger.debug(f'Key up: {key_name}')
+        logger.debug(f'Key up: {key_name}')
         command = InputCommands.dispatch_key_event(
             type=KeyEventType.KEY_UP,
             key=key_name,
@@ -162,7 +162,7 @@ class Keyboard:
 
         示例：
             等待 tab.keyboard.hotkey(Key.CONTROL, Key.C) # Ctrl+C"""
-        loguru_logger.info(f'Hotkey: {key1} + {key2}' + (f' + {key3}' if key3 else ''))
+        logger.info(f'Hotkey: {key1} + {key2}' + (f' + {key3}' if key3 else ''))
         keys = [key1, key2]
         if key3 is not None:
             keys.append(key3)

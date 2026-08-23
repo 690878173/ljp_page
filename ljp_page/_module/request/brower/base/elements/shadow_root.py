@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from ljp_page._module.request.brower.base.elements.web_element import WebElement
     from ljp_page._module.request.brower.base.protocol.dom.methods import GetOuterHTMLResponse
 
-from ljp_page.logger import loguru_logger
+from ljp_page.logger import logger
 
 
 class ShadowRoot(FindElementsMixin):
@@ -57,7 +57,7 @@ class ShadowRoot(FindElementsMixin):
             self._routing_session_id = getattr(host_element, '_routing_session_id', None)
             self._routing_parent_frame_id = getattr(host_element, '_routing_parent_frame_id', None)
 
-        loguru_logger.debug(
+        logger.debug(
             f'ShadowRoot initialized: object_id={self._object_id}, mode={self._mode.value}'
         )
 

@@ -9,8 +9,8 @@ from concurrent.futures import Future
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
-from ljp_page._core.base import Ljp_BaseClass_Logger
 from ljp_page._core.exceptions import No
+from ljp_page.logger import logger
 
 
 @dataclass(slots=True)
@@ -33,7 +33,7 @@ class AsyncStats:
         }
 
 
-class Async(Ljp_BaseClass_Logger):
+class Async:
     """在后台线程维护事件循环的异步运行时。"""
 
     # 默认历史任务保留上限，防止内存泄漏。
@@ -42,12 +42,9 @@ class Async(Ljp_BaseClass_Logger):
     def __init__(
         self,
         mode: int = 1,
-        logger: Any = None,
         *,
         history_limit: int = _DEFAULT_HISTORY_LIMIT,
     ) -> None:
-        super().__init__()
-        self.logger = logger
         self.mode = mode  # 0=daemon, 1=non-daemon（保留兼容，推荐用 daemon 参数）
 
         self.loop: asyncio.AbstractEventLoop | None = None
@@ -120,9 +117,9 @@ class Async(Ljp_BaseClass_Logger):
         if thread is not None and thread.is_alive() and threading.current_thread() is not thread:
             # 等待事件循环线程完成 finally 清理（取消pending task、关闭asyncgen等）
             if not self._stopped.wait(timeout=timeout):
-                self.warning(
-                    f"异步事件循环线程未在 {timeout}s 内完成清理，强制 join",
-                    self.stop.__name__,
+                logger.warning(
+                    f"[{self.stop.__name__}] "
+                    f"异步事件循环线程未在 {timeout}s 内完成清理，强制 join"
                 )
             thread.join(timeout=timeout)
 
@@ -203,15 +200,15 @@ class Async(Ljp_BaseClass_Logger):
                         return
                     callback(done_future.result())
                 except Exception as exc:
-                    self.error(f"任务回调执行失败(task_id={resolved_task_id}): {exc}")
+                    logger.error(f"任务回调执行失败(task_id={resolved_task_id}): {exc}")
 
             future.add_done_callback(_cb)
 
         if await_result:
             if timeout is None:
-                self.warning(
-                    "await_result=True 但未设置 timeout，可能永久阻塞",
-                    self.submit.__name__,
+                logger.warning(
+                    f"[{self.submit.__name__}] "
+                    "await_result=True 但未设置 timeout，可能永久阻塞"
                 )
             return future.result(timeout=timeout)
         return future
@@ -256,8 +253,8 @@ class Async(Ljp_BaseClass_Logger):
             wrapped_coros = [self.submit_inside(coro) for coro in coros]
             return await asyncio.gather(*wrapped_coros, return_exceptions=return_exceptions)
         except Exception as exc:
-            self.error(f"批量子任务执行失败: {exc}", self.submit_inside_s.__name__)
-            raise No("批量子任务执行失败", f=self.submit_inside_s, e=exc)
+            logger.error(f"[{self.submit_inside_s.__name__}] 批量子任务执行失败: {exc}")
+            raise No("批量子任务执行失败", f=self.submit_inside_s) from exc
 
     async def submit_async(self, coro: Awaitable[Any]) -> Any:
         future = self.submit(coro)

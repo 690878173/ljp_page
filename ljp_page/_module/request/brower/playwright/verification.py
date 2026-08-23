@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-import inspect
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable, Mapping, TypeVar
+
 from ljp_page._core.utils.async_tool import resolve_value
-from ..fp.fp_cf import CF_str
+
+from ..base.fingerprint import CLOUDFLARE_TARGET
+from ..base.model import FetchResult
 
 _T = TypeVar("_T")
 
@@ -139,6 +141,8 @@ class VerificationGate:
                                 version=version, extra=dict(context or {}))
             if await self._handle(ctx, version):
                 attempt += 1
+                continue
+            return response
 
 
 # ── CF 响应检测 (从 Ljp_Context 提取) ──
@@ -148,6 +152,8 @@ class CfResponseChecker:
 
     @staticmethod
     def _response_text(response: Any) -> str:
+        if isinstance(response, FetchResult):
+            return response.text
         if not isinstance(response, dict):
             return ""
         parts: list[str] = []
@@ -164,6 +170,8 @@ class CfResponseChecker:
 
     @staticmethod
     def _response_headers(response: Any) -> dict[str, str]:
+        if isinstance(response, FetchResult):
+            return {str(key).lower(): str(value) for key, value in response.headers.items()}
         if not isinstance(response, dict):
             return {}
         headers = response.get("headers") or {}
@@ -172,11 +180,14 @@ class CfResponseChecker:
     async def is_cf_challenge(self, response: Any) -> bool:
         text = self._response_text(response)
         text_lower = text.lower()
-        if any(kw.lower() in text_lower for kw in CF_str.INVALID_TITLE_KEYWORDS):
+        if any(kw.lower() in text_lower for kw in CLOUDFLARE_TARGET.invalid_title_keywords):
             return True
         if "cf-chl" in text_lower or "challenges.cloudflare.com" in text_lower:
             return True
-        status = int(response.get("status") or 0) if isinstance(response, dict) else 0
+        if isinstance(response, FetchResult):
+            status = response.status
+        else:
+            status = int(response.get("status") or 0) if isinstance(response, dict) else 0
         headers = self._response_headers(response)
         return status in {403, 503} and "cloudflare" in headers.get("server", "").lower()
 

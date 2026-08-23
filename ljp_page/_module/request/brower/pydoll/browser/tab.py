@@ -25,7 +25,7 @@ from typing import (
     overload,
 )
 
-import aiofiles
+import aiofile
 
 from ljp_page._module.request.brower.pydoll.browser.requests import Request
 from ljp_page._module.request.brower.pydoll.commands import (

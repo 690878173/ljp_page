@@ -3,10 +3,11 @@ from typing import Any
 
 from typing_extensions import NotRequired, TypedDict
 
-from base import CDPEvent
-from network.types import RequestId, TimeSinceEpoch
-from page.types import FrameId
-from storage.types import (
+from ..base import CDPEvent
+from ..network.types import RequestId, TimeSinceEpoch
+from ..page.types import FrameId
+from ..target.types import TargetID
+from .types import (
     AttributionReportingAggregatableResult,
     AttributionReportingEventLevelResult,
     AttributionReportingReportResult,
@@ -22,7 +23,6 @@ from storage.types import (
     SharedStorageAccessScope,
     StorageBucketInfo,
 )
-from target.types import TargetID
 
 
 class StorageEvent(str, Enum):

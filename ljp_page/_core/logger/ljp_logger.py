@@ -130,4 +130,4 @@ class Logger:
 
 logger = Logger()
 
-__all__ = ["Logger", 'logger', 'LogConfig']
+__all__ = ["Logger", "logger", "loguru_logger", "LogConfig"]

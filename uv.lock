@@ -973,6 +973,7 @@ dependencies = [
     { name = "lxml" },
     { name = "pydantic" },
     { name = "pymysql" },
+    { name = "pytest" },
     { name = "requests" },
 ]
 
@@ -1086,6 +1087,7 @@ requires-dist = [
     { name = "pyexecjs", marker = "extra == 'js-crypto'", specifier = ">=1.5.1" },
     { name = "pymysql", specifier = ">=1.2.0" },
     { name = "pyqt6", marker = "extra == 'ui'", specifier = ">=6.11.0" },
+    { name = "pytest", specifier = ">=9.0.2" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.4.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.21.0" },
     { name = "requests", specifier = ">=2.31.0" },

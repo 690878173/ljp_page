@@ -6,7 +6,7 @@ import asyncio
 from typing import Any, Callable, Awaitable
 
 from ljp_page._module.runtime import LJPExc
-from ljp_page.logger import loguru_logger
+from ljp_page.logger import logger
 
 from .config import Config
 from .controller import LifecycleController
@@ -75,11 +75,11 @@ class PipelineScheduler:
                 result = await self._on_fetch_p1(p1_id)
                 for item in result.items:
                     await self.p2_queue.put(item)
-                loguru_logger.info(f"P1 [{p1_id}] 产出 {len(result.items)} 个任务")
+                logger.info(f"P1 [{p1_id}] 产出 {len(result.items)} 个任务")
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
-                loguru_logger.error(f"P1 worker 失败 [{p1_id}]: {exc}")
+                logger.error(f"P1 worker 失败 [{p1_id}]: {exc}")
             finally:
                 self.p1_queue.task_done()
 
@@ -99,7 +99,7 @@ class PipelineScheduler:
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
-                loguru_logger.error(f"P2 worker 失败: {exc}")
+                logger.error(f"P2 worker 失败: {exc}")
             finally:
                 self.p2_queue.task_done()
 

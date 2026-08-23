@@ -2,8 +2,8 @@ from enum import Enum
 
 from typing_extensions import NotRequired, TypedDict
 
-from network.types import TimeSinceEpoch
-from target.types import TargetID
+from ..network.types import TimeSinceEpoch
+from ..target.types import TargetID
 
 SerializedStorageKey = str
 InterestGroupAuctionId = str

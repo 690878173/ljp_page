@@ -2,8 +2,8 @@ from enum import Enum
 
 from typing_extensions import NotRequired, TypedDict
 
-from ljp_page._module.request.brower.base.protocol.network.types import LoaderId, ResourceType, TimeSinceEpoch
-from ljp_page._module.request.brower.base.protocol.runtime.types import ScriptId, UniqueDebuggerId
+from ..network.types import LoaderId, ResourceType, TimeSinceEpoch
+from ..runtime.types import ScriptId, UniqueDebuggerId
 
 FrameId = str
 ScriptIdentifier = str

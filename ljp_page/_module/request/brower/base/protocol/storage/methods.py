@@ -2,11 +2,11 @@ from enum import Enum
 
 from typing_extensions import NotRequired, TypedDict
 
-from base import Command, EmptyParams, EmptyResponse, Response
-from browser.types import BrowserContextID
-from network.types import Cookie, CookieParam
-from page.types import FrameId
-from storage.types import (
+from ..base import Command, EmptyParams, EmptyResponse, Response
+from ..browser.types import BrowserContextID
+from ..network.types import Cookie, CookieParam
+from ..page.types import FrameId
+from .types import (
     RelatedWebsiteSet,
     SerializedStorageKey,
     SharedStorageEntry,

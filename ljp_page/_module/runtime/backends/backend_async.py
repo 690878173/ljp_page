@@ -23,13 +23,9 @@ class AsyncBackend(BaseBackend):
         runtime: Async | None = None,
         *,
         async_mode: int = 1,
-        logger: Any = None,
     ) -> None:
         super().__init__()
-        self.runtime = runtime or Async(
-            mode=async_mode,
-            logger=logger,
-        )
+        self.runtime = runtime or Async(mode=async_mode)
 
     def submit(self, bound_task: BindTask, config: TaskSubmitConfig) -> Future[Any]:
         return self._submit(bound_task, config)

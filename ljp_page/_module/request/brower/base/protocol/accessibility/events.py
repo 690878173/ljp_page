@@ -2,8 +2,8 @@ from enum import Enum
 
 from typing_extensions import TypedDict
 
-from accessibility.types import AXNode
-from base import CDPEvent
+from ..base import CDPEvent
+from .types import AXNode
 
 
 class AccessibilityEvent(str, Enum):

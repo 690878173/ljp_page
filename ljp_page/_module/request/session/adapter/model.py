@@ -1,50 +1,58 @@
-"""HTTP 适配器抽象基类。"""
+"""The backend boundary for HTTP sessions."""
 
 from __future__ import annotations
 
 import abc
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar, Mapping
+
+from ..types import AdapterCloseResult, AdapterSendResult
 
 if TYPE_CHECKING:
-    from ...config import LjpConfig
-    from ..models import AdapterResult, RequestContext
+    from ..config import SessionConfig
+    from ..models import RequestArgs, RequestsReponse
 
 
-class BaseHttpAdapter(abc.ABC):
-    """HTTP 适配器抽象基类，定义统一接口契约。"""
+class BaseAdapter(abc.ABC):
+    """Owns a native HTTP session and translates only neutral request models."""
 
-    @abc.abstractmethod
-    def create_session(
-        self,
-        headers: dict[str, str],
-        cookies: dict[str, str],
-        config: "LjpConfig",
-    ) -> Any:
-        ...
+    is_async: ClassVar[bool] = False
 
     @abc.abstractmethod
-    def close(self, session: Any | None) -> Any:
-        """aiohttp/curl-cffi 返回 coroutine；requests 返回 None。"""
-        ...
+    def open(self, config: "SessionConfig", cookies: Mapping[str, str]) -> None:
+        """Create and retain the native session if it is not already open."""
 
     @abc.abstractmethod
-    def send(self, session: Any, context: "RequestContext") -> Any:
-        """同步返回 AdapterResult；异步返回 Awaitable[AdapterResult]。"""
-        ...
-
-    @staticmethod
-    @abc.abstractmethod
-    def extract_cookies(session: Any) -> dict[str, str]:
-        ...
-
-    @staticmethod
-    @abc.abstractmethod
-    def update_headers(session: Any | None, headers: dict[str, str]) -> None:
-        ...
+    def close(self) -> AdapterCloseResult:
+        """Release the native session. Async adapters return an awaitable."""
 
     @abc.abstractmethod
-    def update_cookies(self, session: Any | None, cookies: dict[str, str]) -> None:
-        ...
+    def send(self, request: "RequestArgs") -> AdapterSendResult:
+        """Perform I/O and return a unified response or awaitable response."""
+
+    @property
+    @abc.abstractmethod
+    def closed(self) -> bool:
+        """Whether the adapter currently has no usable native session."""
+
+    @abc.abstractmethod
+    def get_cookies(self) -> dict[str, str]:
+        """Return a snapshot of the native cookie jar."""
+
+    @abc.abstractmethod
+    def set_cookies(self, cookies: Mapping[str, str]) -> None:
+        """Replace the native cookie jar contents."""
+
+    @abc.abstractmethod
+    def update_cookies(self, cookies: Mapping[str, str]) -> None:
+        """Merge cookies into the native cookie jar."""
+
+    @abc.abstractmethod
+    def clear_cookies(self) -> None:
+        """Clear the native cookie jar."""
+
+    @abc.abstractmethod
+    def map_exception(self, exc: Exception, request: "RequestArgs") -> Exception:
+        """Map a backend exception to the project's public exception hierarchy."""
 
 
-# __all__ = ["BaseHttpAdapter"]
+__all__ = ["BaseAdapter"]

@@ -3,6 +3,13 @@ from enum import Enum
 from typing_extensions import TypedDict
 
 from ..base import Command, EmptyParams, EmptyResponse, Response
+from ..page.types import FrameId
+from ..runtime.types import (
+    ExecutionContextId,
+    RemoteObject,
+    RemoteObjectId,
+    StackTrace,
+)
 from .types import (
     BackendNodeId,
     BoxModel,
@@ -16,13 +23,6 @@ from .types import (
     Quad,
     Rect,
     RelationType,
-)
-from ..page.types import FrameId
-from ..runtime.types import (
-    ExecutionContextId,
-    RemoteObject,
-    RemoteObjectId,
-    StackTrace,
 )
 
 

@@ -5,7 +5,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, Callable, Iterable, Optional, TypeVar, cast
 
-from ljp_page._core.base import Ljp_BaseClass_Logger
+from ljp_page.logger import logger
 
 _T = TypeVar("_T")
 
@@ -31,7 +31,7 @@ class PoolStats:
         }
 
 
-class ThreadPool(Ljp_BaseClass_Logger):
+class ThreadPool:
     """对 ThreadPoolExecutor 的轻量封装，增加任务跟踪和状态统计。"""
 
     def __init__(
@@ -97,9 +97,9 @@ class ThreadPool(Ljp_BaseClass_Logger):
                 self._refresh_running_locked()
 
             if task_exception is not None and not was_cancelled:
-                self.warning(
-                    f"线程池任务执行失败(task_id={task_id}): {task_exception}",
-                    self.submit.__name__,
+                logger.warning(
+                    f"[{self.submit.__name__}] "
+                    f"线程池任务执行失败(task_id={task_id}): {task_exception}"
                 )
 
         future.add_done_callback(_on_done)
@@ -124,9 +124,9 @@ class ThreadPool(Ljp_BaseClass_Logger):
 
                 callback(done_future.result())
             except Exception as callback_error:
-                self.error(
-                    f"任务回调执行失败(task_id={task_id}): {callback_error}",
-                    self._attach_callback.__name__,
+                logger.error(
+                    f"[{self._attach_callback.__name__}] "
+                    f"任务回调执行失败(task_id={task_id}): {callback_error}"
                 )
 
         future.add_done_callback(_wrapper)

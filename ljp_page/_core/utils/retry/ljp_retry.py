@@ -1,10 +1,14 @@
 import asyncio
 import inspect
+import logging
 from dataclasses import dataclass
 from functools import wraps
 from typing import Any, Callable, Coroutine, List, Optional, Type, TypeVar, Union
 
-from ljp_page.logger import loguru_logger
+try:
+    from loguru import logger as loguru_logger
+except ImportError:
+    loguru_logger = logging.getLogger(__name__)
 
 T = TypeVar('T')
 

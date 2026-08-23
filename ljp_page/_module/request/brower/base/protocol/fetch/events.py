@@ -3,8 +3,8 @@ from enum import Enum
 from typing_extensions import TypedDict
 
 from ..base import CDPEvent
-from .types import AuthChallenge
 from ..network.types import ErrorReason, Request, ResourceType
+from .types import AuthChallenge
 
 
 class FetchEvent(str, Enum):

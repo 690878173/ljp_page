@@ -2,8 +2,8 @@ from enum import Enum
 
 from typing_extensions import TypedDict
 
-from accessibility.types import AXNode, AXNodeId
-from base import Command, EmptyParams, EmptyResponse, Response
+from ..base import Command, EmptyParams, EmptyResponse, Response
+from .types import AXNode, AXNodeId
 
 
 class AccessibilityMethod(str, Enum):

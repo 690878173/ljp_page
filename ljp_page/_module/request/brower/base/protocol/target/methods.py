@@ -2,9 +2,9 @@ from enum import Enum
 
 from typing_extensions import NotRequired, TypedDict
 
-from base import Command, EmptyParams, EmptyResponse, Response
-from browser.types import BrowserContextID, WindowState
-from target.types import (
+from ..base import Command, EmptyParams, EmptyResponse, Response
+from ..browser.types import BrowserContextID, WindowState
+from .types import (
     RemoteLocation,
     SessionID,
     TargetFilter,

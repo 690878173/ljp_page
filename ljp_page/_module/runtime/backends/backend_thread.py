@@ -23,7 +23,6 @@ class ThreadBackend(BaseBackend):
         *,
         max_workers: int | None = None,
         thread_name_prefix: str = "LjpExcThreadPool",
-        logger: Any = None,
     ) -> None:
         super().__init__()
         self.pool = pool or ThreadPool(
@@ -45,4 +44,3 @@ class ThreadBackend(BaseBackend):
 
     def shutdown(self, wait: bool = True, cancel_futures: bool = False, **_: Any) -> None:
         self.pool.shutdown(wait=wait, cancel_futures=cancel_futures)
-

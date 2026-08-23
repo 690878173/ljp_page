@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any, AsyncIterator
 from ljp_page._core._base_class import Ljp_BaseClass
 from ljp_page._module.request.fp import FP
 from ljp_page.logger import loguru_logger
-from ljp_page.request.edge.pydoll import Edge, EdgeConfig
+from ljp_page.request.browser.pydoll import Edge, EdgeConfig
 
 if TYPE_CHECKING:
     from ljp_page._apps.pydoll_pc.base.model import Config

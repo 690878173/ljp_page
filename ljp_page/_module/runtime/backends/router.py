@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from .ljp_async import Async
 from .ljp_threadpool import ThreadPool
@@ -24,14 +24,12 @@ class BackendRouter:
     def __init__(
         self,
         *,
-        logger: Any = None,
         thread_pool: ThreadPool | None = None,
         asy: Async | None = None,
         thread_max_workers: int | None = None,
         thread_name_prefix: str = "LjpExcThreadPool",
         async_mode: int = 1,
     ) -> None:
-        self.logger = logger
         self.thread_pool = thread_pool
         self.asy = asy
         self.process_pool = None
@@ -75,7 +73,6 @@ class BackendRouter:
                     pool=self.thread_pool,
                     max_workers=self._thread_max_workers,
                     thread_name_prefix=self._thread_name_prefix,
-                    logger=self.logger,
                 )
                 self.thread_pool = self._thread_backend.pool
             return self._thread_backend
@@ -85,7 +82,6 @@ class BackendRouter:
                 self._async_backend = AsyncBackend(
                     runtime=self.asy,
                     async_mode=self._async_mode,
-                    logger=self.logger,
                 )
                 self.asy = self._async_backend.runtime
             return self._async_backend

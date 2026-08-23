@@ -1,104 +1,319 @@
-"""会话池——管理多个 AsyncSession 实例，支持轮询调度与验证拦截。"""
+"""Synchronous and asynchronous pools built on adapter-neutral sessions."""
 
 from __future__ import annotations
 
 import asyncio
-import logging
+import queue
+import threading
 from copy import deepcopy
-from typing import Any, Mapping
+from types import TracebackType
+from typing import Callable, Mapping, TypeAlias, Unpack, cast
 
-from ljp_page._core.utils.config import SessionPoolConfig
-from ljp_page._module.request.verification import AsyncVerification
+from ljp_page._module.request.verification import AsyncVerification, SyncVerification
 
+from .adapter import BaseAdapter
 from .async_client import AsyncSession
-from .config import LjpConfig
-from .models import LjpResponse
+from .base import BaseSession
+from .config import SessionConfig
+from .models import RequestsReponse
+from .sync_client import SyncSession
+from .types import (
+    AsyncVerificationRunner,
+    CookieMap,
+    HeaderMap,
+    RequestOptions,
+    SyncVerificationRunner,
+)
 
-_logger = logging.getLogger(__name__)
+AdapterFactory: TypeAlias = Callable[[], BaseAdapter]
+AdapterSource: TypeAlias = AdapterFactory | type[BaseAdapter]
 
 
-class SessionPool:
-    """异步会话池——轮询分配 + 验证拦截。"""
+class _BaseSessionPool:
+    """Shared state and broadcast operations for public session pools."""
+
+    def __init__(self, config: SessionConfig | None, adapter: AdapterSource | None) -> None:
+        self.config = config or SessionConfig()
+        self._adapter_source = adapter
+        self._sessions: list[BaseSession] = []
+
+    @property
+    def headers(self) -> dict[str, str]:
+        return deepcopy(self.config.Request.headers)
+
+    @headers.setter
+    def headers(self, values: HeaderMap) -> None:
+        merged = dict(values)
+        self.config.Request.headers = merged
+        for session in self._sessions:
+            session.headers = merged
+
+    def update_headers(self, values: HeaderMap) -> None:
+        merged = BaseSession._merge_headers(self.config.Request.headers, values)
+        self.config.Request.headers = merged
+        for session in self._sessions:
+            session.headers = merged
+
+    @property
+    def cookies(self) -> dict[str, str]:
+        if not self._sessions:
+            return deepcopy(self.config.Request.cookies)
+        return self._sessions[0].cookies
+
+    @cookies.setter
+    def cookies(self, values: CookieMap) -> None:
+        copied = dict(values)
+        self.config.Request.cookies = copied
+        for session in self._sessions:
+            session.cookies = copied
+
+    def update_cookies(self, values: CookieMap) -> None:
+        copied = dict(values)
+        self.config.Request.cookies.update(copied)
+        for session in self._sessions:
+            session.update_cookies(copied)
+
+    def clear_cookies(self) -> None:
+        self.config.Request.cookies.clear()
+        for session in self._sessions:
+            session.clear_cookies()
+
+    def apply_verification_result(self, result: object, context: object | None = None) -> None:
+        """Apply public Cookie/Header updates returned by a verification handler."""
+
+        del context
+        if not isinstance(result, Mapping):
+            return
+        headers = result.get("headers")
+        cookies = result.get("cookies")
+        if isinstance(headers, Mapping):
+            self.update_headers(cast(HeaderMap, headers))
+        if isinstance(cookies, Mapping):
+            self.update_cookies(cast(CookieMap, cookies))
+
+    def _new_adapter(self) -> BaseAdapter | None:
+        if self._adapter_source is None:
+            return None
+        return self._adapter_source()
+
+    def _pool_size(self) -> int:
+        size = int(self.config.SessionPool.max_session)
+        if size < 1:
+            raise ValueError("SessionPool.max_session must be at least 1")
+        return size
+
+    @staticmethod
+    def _request_context(
+        owner: object,
+        method: str,
+        url: str,
+        kwargs: Mapping[str, object],
+    ) -> dict[str, object]:
+        return {
+            "owner": owner,
+            "method": method,
+            "url": url,
+            "request_kwargs": dict(kwargs),
+        }
+
+
+class SyncSessionPool(_BaseSessionPool):
+    """Blocking pool that leases :class:`SyncSession` instances per request."""
 
     def __init__(
         self,
-        config: LjpConfig | None = None,
+        config: SessionConfig | None = None,
         *,
-        verification: Any = None,
-        adapter: Any = None,
+        verification: SyncVerificationRunner | None = None,
+        adapter: AdapterSource | None = None,
     ) -> None:
-        self.config = config or LjpConfig(sessionpool=SessionPoolConfig(max_session=1))
-        self._adapter = adapter
-        self.verification = verification or AsyncVerification(
-            result_applier=self.apply_verification_result,
+        super().__init__(config, adapter)
+        self.verification = verification or SyncVerification(
             checker=None,
             handler=None,
+            result_applier=self.apply_verification_result,
         )
-        self._sessions: list[AsyncSession] = []
+        self._queue: queue.Queue[SyncSession] = queue.Queue()
+        self._init_lock = threading.RLock()
+        self._initialized = False
+
+    @property
+    def closed(self) -> bool:
+        return not self._initialized
+
+    def open(self) -> "SyncSessionPool":
+        self._ensure_initialized()
+        return self
+
+    def _ensure_initialized(self) -> None:
+        if self._initialized:
+            return
+        with self._init_lock:
+            if self._initialized:
+                return
+            try:
+                for _ in range(self._pool_size()):
+                    session = SyncSession(config=self.config, adapter=self._new_adapter())
+                    self._sessions.append(session)
+                    session.open()
+                    self._queue.put_nowait(session)
+            except BaseException:
+                self._close_initialized_sessions()
+                raise
+            self._initialized = True
+
+    def _close_initialized_sessions(self) -> None:
+        sessions = tuple(self._sessions)
+        self._sessions.clear()
+        self._drain_queue()
+        for session in sessions:
+            session.close()
+        self._initialized = False
+
+    def _drain_queue(self) -> None:
+        while True:
+            try:
+                self._queue.get_nowait()
+            except queue.Empty:
+                return
+
+    def request(
+        self,
+        method: str,
+        url: str,
+        *,
+        session: SyncSession | None = None,
+        verify_response: bool = True,
+        verify_max_retries: int | None = None,
+        **kwargs: Unpack[RequestOptions],
+    ) -> RequestsReponse:
+        self.open()
+
+        def send() -> RequestsReponse:
+            leased_session = session or self._queue.get()
+            try:
+                return leased_session.request(method, url, **kwargs)
+            finally:
+                if session is None and not leased_session.closed:
+                    self._queue.put(leased_session)
+
+        return self.verification.run(
+            send,
+            context=self._request_context(self, method, url, kwargs),
+            verify_response=verify_response,
+            max_retries=verify_max_retries,
+        )
+
+    def get(
+        self, url: str, *, session: SyncSession | None = None, **kwargs: Unpack[RequestOptions]
+    ) -> RequestsReponse:
+        return self.request("GET", url, session=session, **kwargs)
+
+    def post(
+        self, url: str, *, session: SyncSession | None = None, **kwargs: Unpack[RequestOptions]
+    ) -> RequestsReponse:
+        return self.request("POST", url, session=session, **kwargs)
+
+    def put(
+        self, url: str, *, session: SyncSession | None = None, **kwargs: Unpack[RequestOptions]
+    ) -> RequestsReponse:
+        return self.request("PUT", url, session=session, **kwargs)
+
+    def patch(
+        self, url: str, *, session: SyncSession | None = None, **kwargs: Unpack[RequestOptions]
+    ) -> RequestsReponse:
+        return self.request("PATCH", url, session=session, **kwargs)
+
+    def delete(
+        self, url: str, *, session: SyncSession | None = None, **kwargs: Unpack[RequestOptions]
+    ) -> RequestsReponse:
+        return self.request("DELETE", url, session=session, **kwargs)
+
+    def head(
+        self, url: str, *, session: SyncSession | None = None, **kwargs: Unpack[RequestOptions]
+    ) -> RequestsReponse:
+        return self.request("HEAD", url, session=session, **kwargs)
+
+    def options(
+        self, url: str, *, session: SyncSession | None = None, **kwargs: Unpack[RequestOptions]
+    ) -> RequestsReponse:
+        return self.request("OPTIONS", url, session=session, **kwargs)
+
+    def close(self) -> None:
+        with self._init_lock:
+            self._close_initialized_sessions()
+
+    def __enter__(self) -> "SyncSessionPool":
+        return self.open()
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        self.close()
+
+
+class AsyncSessionPool(_BaseSessionPool):
+    """Async pool that leases :class:`AsyncSession` instances per request."""
+
+    def __init__(
+        self,
+        config: SessionConfig | None = None,
+        *,
+        verification: AsyncVerificationRunner | None = None,
+        adapter: AdapterSource | None = None,
+    ) -> None:
+        super().__init__(config, adapter)
+        self.verification = verification or AsyncVerification(
+            checker=None,
+            handler=None,
+            result_applier=self.apply_verification_result,
+        )
         self._queue: asyncio.Queue[AsyncSession] = asyncio.Queue()
         self._init_lock = asyncio.Lock()
         self._initialized = False
 
-    # ── Headers / Cookies 广播 ──
-
-    def _broadcast(self, attr: str, *args: Any) -> None:
-        for s in self._sessions:
-            getattr(s, attr)(*args)
-
     @property
-    def headers(self) -> dict[str, str]:
-        return deepcopy(self.config.headers)
+    def closed(self) -> bool:
+        return not self._initialized
 
-    @headers.setter
-    def headers(self, values: Mapping[str, str]) -> None:
-        self.config.headers = dict(values)
-        self._broadcast("headers", values)
+    async def open(self) -> "AsyncSessionPool":
+        await self._ensure_initialized()
+        return self
 
-    @property
-    def cookies(self) -> dict[str, str]:
-        return deepcopy(self.config.cookies)
-
-    @cookies.setter
-    def cookies(self, values: Mapping[str, str]) -> None:
-        self.config.cookies = dict(values)
-        self._broadcast("cookies", values)
-
-    def update_headers(self, values: Mapping[str, str]) -> None:
-        self.config.headers.update(dict(values))
-        self._broadcast("update_headers", values)
-
-    def update_cookies(self, values: Mapping[str, str]) -> None:
-        self.config.cookies.update(dict(values))
-        self._broadcast("update_cookies", values)
-
-    def clear_cookies(self) -> None:
-        self.config.cookies.clear()
-        self._broadcast("clear_cookies")
-
-    def apply_verification_result(self, result: Any, context: Any = None) -> None:
-        if not isinstance(result, Mapping):
-            return
-        if headers := result.get("headers"):
-            self.update_headers(headers)
-        if cookies := result.get("cookies"):
-            self.update_cookies(cookies)
-
-    # ── 初始化 ──
-
-    async def _ensure_init(self) -> None:
+    async def _ensure_initialized(self) -> None:
         if self._initialized:
             return
         async with self._init_lock:
             if self._initialized:
                 return
-            for _ in range(self.config.sessionpool.max_session):
-                s = AsyncSession(config=self.config, adapter=self._adapter)
-                await s.ensure_session()
-                self._sessions.append(s)
-                self._queue.put_nowait(s)
+            try:
+                for _ in range(self._pool_size()):
+                    session = AsyncSession(config=self.config, adapter=self._new_adapter())
+                    self._sessions.append(session)
+                    await session.open()
+                    self._queue.put_nowait(session)
+            except BaseException:
+                await self._close_initialized_sessions()
+                raise
             self._initialized = True
 
-    # ── 请求 ──
+    async def _close_initialized_sessions(self) -> None:
+        sessions = tuple(self._sessions)
+        self._sessions.clear()
+        self._drain_queue()
+        self._initialized = False
+        for session in sessions:
+            await cast(AsyncSession, session).close()
+
+    def _drain_queue(self) -> None:
+        while True:
+            try:
+                self._queue.get_nowait()
+            except asyncio.QueueEmpty:
+                return
 
     async def request(
         self,
@@ -108,58 +323,76 @@ class SessionPool:
         session: AsyncSession | None = None,
         verify_response: bool = True,
         verify_max_retries: int | None = None,
-        **kwargs: Any,
-    ) -> LjpResponse:
-        if not self._initialized:
-            await self._ensure_init()
+        **kwargs: Unpack[RequestOptions],
+    ) -> RequestsReponse:
+        await self.open()
 
-        async def _send() -> LjpResponse:
-            s = session or await self._queue.get()
+        async def send() -> RequestsReponse:
+            leased_session = session or await self._queue.get()
             try:
-                return await s.request(method, url, **kwargs)
+                return await leased_session.request(method, url, **kwargs)
             finally:
-                if session is None:
-                    await self._release(s)
+                if session is None and not leased_session.closed:
+                    await self._queue.put(leased_session)
 
         return await self.verification.run(
-            _send,
+            send,
+            context=self._request_context(self, method, url, kwargs),
             verify_response=verify_response,
             max_retries=verify_max_retries,
         )
 
-    async def _release(self, s: AsyncSession) -> None:
-        if not s.closed:
-            await self._queue.put(s)
-
-    # ── 便捷方法 ──
-
-    async def get(self, url: str, *, session: AsyncSession | None = None, **kwargs: Any) -> LjpResponse:
+    async def get(
+        self, url: str, *, session: AsyncSession | None = None, **kwargs: Unpack[RequestOptions]
+    ) -> RequestsReponse:
         return await self.request("GET", url, session=session, **kwargs)
 
-    async def post(self, url: str, *, session: AsyncSession | None = None, **kwargs: Any) -> LjpResponse:
+    async def post(
+        self, url: str, *, session: AsyncSession | None = None, **kwargs: Unpack[RequestOptions]
+    ) -> RequestsReponse:
         return await self.request("POST", url, session=session, **kwargs)
 
-    async def put(self, url: str, *, session: AsyncSession | None = None, **kwargs: Any) -> LjpResponse:
+    async def put(
+        self, url: str, *, session: AsyncSession | None = None, **kwargs: Unpack[RequestOptions]
+    ) -> RequestsReponse:
         return await self.request("PUT", url, session=session, **kwargs)
 
-    async def delete(self, url: str, *, session: AsyncSession | None = None, **kwargs: Any) -> LjpResponse:
+    async def patch(
+        self, url: str, *, session: AsyncSession | None = None, **kwargs: Unpack[RequestOptions]
+    ) -> RequestsReponse:
+        return await self.request("PATCH", url, session=session, **kwargs)
+
+    async def delete(
+        self, url: str, *, session: AsyncSession | None = None, **kwargs: Unpack[RequestOptions]
+    ) -> RequestsReponse:
         return await self.request("DELETE", url, session=session, **kwargs)
 
-    # ── 生命周期 ──
+    async def head(
+        self, url: str, *, session: AsyncSession | None = None, **kwargs: Unpack[RequestOptions]
+    ) -> RequestsReponse:
+        return await self.request("HEAD", url, session=session, **kwargs)
+
+    async def options(
+        self, url: str, *, session: AsyncSession | None = None, **kwargs: Unpack[RequestOptions]
+    ) -> RequestsReponse:
+        return await self.request("OPTIONS", url, session=session, **kwargs)
 
     async def close(self) -> None:
-        for s in self._sessions:
-            await s.close()
-        self._sessions.clear()
-        while not self._queue.empty():
-            self._queue.get_nowait()
-        self._initialized = False
+        async with self._init_lock:
+            await self._close_initialized_sessions()
 
-    async def __aenter__(self) -> "SessionPool":
-        return self
+    async def __aenter__(self) -> "AsyncSessionPool":
+        return await self.open()
 
-    async def __aexit__(self, *args: Any) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
         await self.close()
 
 
-__all__ = ["SessionPool"]
+SessionPool = AsyncSessionPool
+
+__all__ = ["AsyncSessionPool", "SyncSessionPool", "SessionPool"]

@@ -1,18 +1,18 @@
 from __future__ import annotations
 
 from typing import Any
-from ljp_page._core.logger import DEFAULT_LEVEL_ALIASES
-from .logger import loguru_logger
+
+from .logger import logger
 
 
 class Ljp_BaseClass_Logger:
     def __init__(self):
-        self.logger = loguru_logger
-
-    def set_logger(self, logger: Any) -> None:
         self.logger = logger
 
-    def log(self, mes: str,level:int=5, f_name: str = "") -> None:
+    def set_logger(self, log: Any) -> None:
+        self.logger = log
+
+    def log(self, mes: str, level: str = "info", f_name: str = "") -> None:
         """
         统一日志入口
         """
@@ -30,28 +30,28 @@ class Ljp_BaseClass_Logger:
         print(formatted_message)
 
     def debug(self, message: Any, f_name: str = "") -> None:
-        self._log(DEFAULT_LEVEL_ALIASES.get('debug'), message, f_name)
+        self._log("debug", message, f_name)
 
     def trace(self, message: Any, f_name: str = "") -> None:
-        self._log(DEFAULT_LEVEL_ALIASES.get('trace'), message, f_name)
+        self._log("trace", message, f_name)
 
     def info(self, message: Any, f_name: str = "") -> None:
-        self._log(DEFAULT_LEVEL_ALIASES.get('info'), message, f_name)
+        self._log("info", message, f_name)
 
-    def print(self,message: Any, f_name: str = "") -> None:
-        self._log(DEFAULT_LEVEL_ALIASES.get('print'), message, f_name)
+    def print(self, message: Any, f_name: str = "") -> None:
+        self._log("print", message, f_name)
 
     def warrior(self, message: Any, f_name: str = "") -> None:
-        self._log(DEFAULT_LEVEL_ALIASES.get('warrior'), message, f_name)
+        self._log("warrior", message, f_name)
 
     def warning(self, message: Any, f_name: str = "") -> None:
-        self._log(DEFAULT_LEVEL_ALIASES.get('warning'), message, f_name)
+        self._log("warning", message, f_name)
 
     def error(self, message: Any, f_name: str = "") -> None:
-        self._log(DEFAULT_LEVEL_ALIASES.get('error'), message, f_name)
+        self._log("error", message, f_name)
 
     def critical(self, message: Any, f_name: str = "") -> None:
-        self._log(DEFAULT_LEVEL_ALIASES.get('critical'), message, f_name)
+        self._log("critical", message, f_name)
 
     def __str__(self) -> str:
         # 获取 完整模块名 + 类名
@@ -59,7 +59,6 @@ class Ljp_BaseClass_Logger:
         return f"<{full_class_name}>"
 
 __all__ = ['Ljp_BaseClass_Logger']
-
 
 
 

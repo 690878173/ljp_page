@@ -2,8 +2,8 @@ from enum import Enum
 
 from typing_extensions import NotRequired, TypedDict
 
-from base import CDPEvent
-from browser.types import DownloadProgressState
+from ..base import CDPEvent
+from .types import DownloadProgressState
 
 
 class BrowserEvent(str, Enum):

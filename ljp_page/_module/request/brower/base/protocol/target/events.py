@@ -2,8 +2,8 @@ from enum import Enum
 
 from typing_extensions import NotRequired, TypedDict
 
-from base import CDPEvent
-from target.types import SessionID, TargetID, TargetInfo
+from ..base import CDPEvent
+from .types import SessionID, TargetID, TargetInfo
 
 
 class TargetEvent(str, Enum):

@@ -1,179 +1,118 @@
-"""curl_cffi 异步适配器——支持 TLS 指纹伪装。"""
+"""curl-cffi asynchronous backend adapter."""
 
 from __future__ import annotations
 
 import asyncio
-from typing import Any, TYPE_CHECKING
+from typing import Mapping
 
-from ljp_page._core.exceptions import NetworkException, TimeoutException
+from curl_cffi import requests as curl_requests
+from curl_cffi.requests import errors
 
-from .model import BaseHttpAdapter
+from ljp_page._core.exceptions import LjpBaseException, NetworkException, TimeoutException
 
-if TYPE_CHECKING:
-    import curl_cffi
-    from ...config import LjpConfig
-    from ..models import AdapterResult, RequestContext
+from .model import BaseAdapter
+from ..config import SessionConfig
+from ..models import RequestArgs, RequestsReponse
 
 
-class CurlCffiAdapter(BaseHttpAdapter):
-    """curl_cffi 异步适配器——支持 TLS 指纹伪装。
+class CurlCffiAdapter(BaseAdapter):
+    """Owns curl-cffi's async session, including its native cookie jar."""
 
-    用法::
-
-        config = LjpConfig(extra={"impersonate": "chrome120"})
-        session = AsyncSession(config, adapter=CurlCffiAdapter())
-        resp = await session.get("https://example.com")
-
-    指纹参数既可通过 ``config.extra`` 设置 session 默认值，
-    也可在单次请求中覆盖::
-
-        resp = await session.get(url, impersonate="chrome110")
-    """
-
-    _FINGERPRINT_KEYS = frozenset({
-        "impersonate", "ja3", "akamai", "extra_fp",
-        "http_version", "default_headers",
-    })
+    is_async = True
 
     def __init__(self) -> None:
-        self._cookie_store: dict[str, str] = {}
+        self._session: curl_requests.AsyncSession | None = None
+        self._cookies: dict[str, str] = {}
 
-    # ── 超时 ──
+    @property
+    def closed(self) -> bool:
+        return self._session is None or bool(getattr(self._session, "closed", getattr(self._session, "_closed", False)))
 
-    @staticmethod
-    def build_timeout(timeout: tuple[float, float]) -> tuple[float, float]:
-        """直接返回 (connect, read)，curl_cffi 原生支持。"""
-        return float(timeout[0]), float(timeout[1])
-
-    # ── 创建/关闭 session ──
-
-    def create_session(
-        self,
-        headers: dict[str, str],
-        cookies: dict[str, str],
-        config: "LjpConfig",
-    ) -> "curl_cffi.requests.AsyncSession":
-        from curl_cffi import requests as curl_req
-
-        self._cookie_store = dict(cookies)
-
-        session = curl_req.AsyncSession()
-        session.closed = session._closed
-        session.headers.update(headers)
-        for k, v in cookies.items():
-            session.cookies.set(k, v)
-
-        # TLS 指纹 —— session 默认，per-request 可覆盖
-        impersonate = config.extra.get("impersonate")
+    def open(self, config: SessionConfig, cookies: Mapping[str, str]) -> None:
+        if not self.closed:
+            return
+        self._session = curl_requests.AsyncSession()
+        self._session.headers.clear()  # RequestArgs.headers is the only header source.
+        impersonate = config.Request.extra.get("impersonate", config.extra.get("impersonate"))
         if impersonate:
-            session.impersonate = impersonate
+            self._session.impersonate = impersonate
+        self._session.cookies.update(self._cookies)
 
-        return session
+    async def close(self) -> None:
+        if self._session is not None:
+            self._cookies = self.get_cookies()
+            await self._session.close()
+        self._session = None
 
-    async def close(
-        self,
-        session: "curl_cffi.requests.AsyncSession | None",
-    ) -> None:
-        if session is not None:
-            await session.close()
-
-    # ── 发送 ──
-
-    async def send(
-        self,
-        session: "curl_cffi.requests.AsyncSession",
-        context: "RequestContext",
-    ) -> "AdapterResult":
-        from ..models import AdapterResult
-
-        request_kwargs: dict[str, Any] = {
-            "params": context.params,
-            "data": context.data,
-            "json": context.json_data,
-            "headers": context.headers,
-            "cookies": context.cookies or None,
-            "timeout": self.build_timeout(context.timeout),
-            "allow_redirects": context.allow_redirects,
-            "verify": context.verify_ssl,
-            "proxy": context.proxy_url,
-        }
-
-        # TLS 指纹 —— per-request 覆盖 session 级别
-        for key in self._FINGERPRINT_KEYS:
-            if key in context.extra:
-                request_kwargs[key] = context.extra[key]
-
+    async def send(self, request: RequestArgs) -> RequestsReponse:
+        if self.closed:
+            raise RuntimeError("CurlCffiAdapter is not open")
         try:
-            resp = await session.request(
-                context.method,
-                context.url,
-                **request_kwargs,
+            response = await self._session.request(
+                method=request.method,
+                url=request.url,
+                params=request.params,
+                data=request.data,
+                json=request.json_data,
+                headers=dict(request.headers),
+                cookies=dict(request.cookies) if request.cookies else None,
+                timeout=request.timeout,
+                allow_redirects=request.allow_redirects,
+                verify=request.verify_ssl,
+                proxy=request.proxy_url,
+                stream=request.stream,
+                **dict(request.extra),
             )
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            raise self.map_exception(exc, context) from exc
+            raise self.map_exception(exc, request) from exc
 
-        return AdapterResult(
-            status_code=resp.status_code,
-            headers=dict(resp.headers),
-            content=resp.content,
-            encoding=resp.encoding,
-            cookies=self.extract_cookies(session),
+        return RequestsReponse(
+            request_args=request,
+            status_code=response.status_code,
+            url=str(response.url),
+            headers=dict(response.headers),
+            content=response.content,
+            encoding=response.encoding,
+            cookies=self.get_cookies(),
+            history=tuple(str(item.url) for item in response.history),
         )
 
-    # ── Cookie 提取 ──
-
-    @staticmethod
-    def extract_cookies(session: "curl_cffi.requests.AsyncSession") -> dict[str, str]:
-        """从 curl_cffi session 中提取所有 cookie。"""
+    def get_cookies(self) -> dict[str, str]:
+        if self.closed:
+            return dict(self._cookies)
         try:
-            jar = session.cookies.jar
-            return {c.name: c.value for c in jar}
+            return {cookie.name: cookie.value for cookie in self._session.cookies.jar}
         except Exception:
-            return {}
+            return dict(self._cookies)
 
-    # ── Header/Cookie 同步 ──
+    def set_cookies(self, cookies: Mapping[str, str]) -> None:
+        self._cookies = dict(cookies)
+        if not self.closed:
+            self._session.cookies.clear()
+            self._session.cookies.update(self._cookies)
 
-    @staticmethod
-    def update_headers(
-        session: "curl_cffi.requests.AsyncSession | None",
-        headers: dict[str, str],
-    ) -> None:
-        if session is not None:
-            session.headers.clear()
-            session.headers.update(headers)
+    def update_cookies(self, cookies: Mapping[str, str]) -> None:
+        self._cookies.update(cookies)
+        if not self.closed:
+            self._session.cookies.update(cookies)
 
-    def update_cookies(
-        self,
-        session: "curl_cffi.requests.AsyncSession | None",
-        cookies: dict[str, str],
-    ) -> None:
-        self._cookie_store = dict(cookies)
-        if session is not None:
-            session.cookies.clear()
-            for k, v in cookies.items():
-                session.cookies.set(k, v)
-
-    # ── 异常映射 ──
+    def clear_cookies(self) -> None:
+        self._cookies.clear()
+        if not self.closed:
+            self._session.cookies.clear()
 
     @staticmethod
-    def map_exception(exc: Exception, context: "RequestContext") -> Exception:
-        import curl_cffi.requests.errors as curl_errors
-
-        if isinstance(exc, (TimeoutException, NetworkException)):
+    def map_exception(exc: Exception, request: RequestArgs) -> Exception:
+        if isinstance(exc, LjpBaseException):
             return exc
-
-        ctx = {"method": context.method, "url": context.url, "attempt": context.attempt}
-
-        if isinstance(exc, asyncio.TimeoutError):
-            return TimeoutException("请求超时", timeout=sum(context.timeout), e=exc, context=ctx)
-
-
-        if isinstance(exc, curl_errors.RequestsError):
-            return NetworkException("请求失败", url=context.url, e=exc, context=ctx)
-
-        return exc
+        context = {"method": request.method, "url": request.url, "attempt": request.attempt}
+        if isinstance(exc, asyncio.TimeoutError) or "timeout" in type(exc).__name__.lower():
+            return TimeoutException("HTTP request timed out", timeout=sum(request.timeout), context=context)
+        if isinstance(exc, errors.RequestsError):
+            return NetworkException("HTTP request failed", url=request.url, context=context)
+        return NetworkException("HTTP backend failed", url=request.url, context=context)
 
 
 __all__ = ["CurlCffiAdapter"]

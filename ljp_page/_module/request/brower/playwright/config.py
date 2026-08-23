@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
 _DEFAULT_BROWSER_ARGS = [
     "--disable-blink-features=AutomationControlled",  # 关闭 webdriver 自动化特征
@@ -26,12 +26,15 @@ _CONTEXT_KEYS = {
     "device_scale_factor",
     "is_mobile",
     "has_touch",
+    "extra_http_headers",
 }
 
 _CUSTOM_KEYS = {
+    "browser_type",
     "user_data_dir",
     "init_script",
     "use_stealth_script",
+    "cookies",
 }
 
 
@@ -43,6 +46,7 @@ class BrowserLaunchConfig:
     profile 与环境评分的验证更接近真实浏览器。
     """
 
+    browser_type: str = "chromium"
     executable_path: Path | str | None = None
     channel: str | None = "msedge"
     args: Sequence[str] | None = field(default_factory=lambda: list(_DEFAULT_BROWSER_ARGS))
@@ -78,6 +82,8 @@ class BrowserLaunchConfig:
     device_scale_factor: float | None = None
     is_mobile: bool | None = None
     has_touch: bool | None = None
+    extra_http_headers: Mapping[str, str] | None = None
+    cookies: Sequence[Mapping[str, Any]] | None = None
 
     # Cloudflare 场景默认不注入指纹脚本，避免过度伪装造成二次风控。
     init_script: str | None = None

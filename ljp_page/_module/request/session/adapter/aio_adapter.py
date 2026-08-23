@@ -1,171 +1,126 @@
-"""aiohttp 异步适配器。"""
+"""aiohttp backend adapter."""
 
 from __future__ import annotations
 
 import asyncio
-from typing import Any, TYPE_CHECKING
+from typing import Mapping
 
 import aiohttp
 
-from ljp_page._core.exceptions import NetworkException, TimeoutException
-from ljp_page._core.utils.config import TimeoutConfig
+from ljp_page._core.exceptions import LjpBaseException, NetworkException, TimeoutException
 
-from .model import BaseHttpAdapter
-
-if TYPE_CHECKING:
-    from ...config import LjpConfig
-    from ..models import AdapterResult, RequestContext
+from .model import BaseAdapter
+from ..config import SessionConfig
+from ..models import RequestArgs, RequestsReponse
 
 
-class AiohttpAdapter(BaseHttpAdapter):
-    """aiohttp 适配器——管理 CookieJar / ClientSession / 异常映射。"""
+class AiohttpAdapter(BaseAdapter):
+    """Owns an aiohttp client and its CookieJar."""
+
+    is_async = True
 
     def __init__(self) -> None:
-        self._jar: aiohttp.CookieJar = None
+        self._session: aiohttp.ClientSession | None = None
+        self._cookies: dict[str, str] = {}
 
-    # ── CookieJar ──
+    @property
+    def closed(self) -> bool:
+        return self._session is None or self._session.closed
 
-    def create_cookie_jar(self, cookies: dict[str, str]) -> aiohttp.CookieJar:
-        self._jar = aiohttp.CookieJar(unsafe=True)
-        self._jar.update_cookies(cookies)
-        return self._jar
+    def open(self, config: SessionConfig, cookies: Mapping[str, str]) -> None:
 
-    # ── 超时 ──
-
-    @staticmethod
-    def build_timeout(timeout: tuple[float, float] | TimeoutConfig) -> aiohttp.ClientTimeout:
-        if isinstance(timeout, TimeoutConfig):
-            connect = timeout.connect
-            read = timeout.read
-        elif isinstance(timeout, tuple):
-            connect, read = timeout
-        else:
-            raise ValueError("timeout 参数错误")
-        return aiohttp.ClientTimeout(
-            total=connect + read,
-            connect=connect,
-            sock_connect=connect,
-            sock_read=read,
-        )
-
-    # ── 创建/关闭 session ──
-
-    def create_session(
-        self,
-        headers: dict[str, str],
-        cookies: dict[str, str],
-        config: "LjpConfig",
-    ) -> aiohttp.ClientSession:
-        jar = self.create_cookie_jar(cookies)
+        if not self.closed:
+            return
+        jar = aiohttp.CookieJar(unsafe=True)
+        jar.update_cookies(self._cookies)
         connector = aiohttp.TCPConnector(
-            limit=config.sessionpool.max_session,
-            limit_per_host=config.sessionpool.max_connections_per_host,
-            keepalive_timeout=config.sessionpool.max_keepalive_connections,
-            ssl=config.verify_ssl,
+            limit=config.SessionPool.max_session,
+            limit_per_host=config.SessionPool.max_connections_per_host,
+            keepalive_timeout=config.SessionPool.max_keepalive_connections,
         )
-        return aiohttp.ClientSession(
-            headers=headers,
+        self._session = aiohttp.ClientSession(
+            headers={},  # Headers are supplied from RequestArgs for every request.
             cookie_jar=jar,
             connector=connector,
-            connector_owner=True,
-            timeout=self.build_timeout(config.timeout),
-            trust_env=config.trust_env,
+            trust_env=config.Request.trust_env,
         )
 
-    async def close(self, session: aiohttp.ClientSession | None) -> None:
-        if session is not None and not session.closed:
-            await session.close()
+    async def close(self) -> None:
+        if self._session is not None and not self._session.closed:
+            self._cookies = self.get_cookies()
+            await self._session.close()
+        self._session = None
 
-    # ── 发送 ──
+    @staticmethod
+    def _timeout(value: tuple[float, float]) -> aiohttp.ClientTimeout:
+        connect, read = value
+        return aiohttp.ClientTimeout(total=connect + read, connect=connect, sock_connect=connect, sock_read=read)
 
-    async def send(
-        self,
-        session: aiohttp.ClientSession,
-        context: "RequestContext",
-    ) -> "AdapterResult":
-        from ..models import AdapterResult
+    async def send(self, request: RequestArgs) -> RequestsReponse:
 
-        if context.cookies:
-            session.cookie_jar.update_cookies(context.cookies)
-
+        if self.closed:
+            raise RuntimeError("AiohttpAdapter is not open")
         try:
-            async with session.request(
-                context.method,
-                context.url,
-                params=context.params,
-                data=context.data,
-                json=context.json_data,
-                headers=context.headers,
-                timeout=self.build_timeout(context.timeout),
-                allow_redirects=context.allow_redirects,
-                ssl=context.verify_ssl,
-                proxy=context.proxy_url,
-            ) as resp:
-                content = await resp.read()
-                return AdapterResult(
-                    status_code=resp.status,
-                    headers=dict(resp.headers),
-                    content=content,
-                    encoding=resp.charset,
-                    cookies=self.extract_cookies(session),
+            async with self._session.request(
+                method=request.method,
+                url=request.url,
+                params=request.params,
+                data=request.data,
+                json=request.json_data,
+                headers=dict(request.headers),
+                cookies=dict(request.cookies) if request.cookies else None,
+                timeout=self._timeout(request.timeout),
+                allow_redirects=request.allow_redirects,
+                ssl=request.verify_ssl,
+                proxy=request.proxy_url,
+                **dict(request.extra),
+            ) as response:
+                return RequestsReponse(
+                    request_args=request,
+                    status_code=response.status,
+                    url=str(response.url),
+                    headers=dict(response.headers),
+                    content=await response.read(),
+                    encoding=response.charset,
+                    cookies=self.get_cookies(),
+                    history=tuple(str(item.url) for item in response.history),
                 )
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            raise self.map_exception(exc, context) from exc
+            raise self.map_exception(exc, request) from exc
 
-    # ── Cookie 提取 ──
+    def get_cookies(self) -> dict[str, str]:
+        if self.closed:
+            return dict(self._cookies)
+        return {cookie.key: cookie.value for cookie in self._session.cookie_jar}
 
-    @staticmethod
-    def extract_cookies(session: aiohttp.ClientSession) -> dict[str, str]:
-        return {
-            c.key: c.value
-            for c in session.cookie_jar.__iter__()
-        }
+    def set_cookies(self, cookies: Mapping[str, str]) -> None:
+        self._cookies = dict(cookies)
+        if not self.closed:
+            self._session.cookie_jar.clear()
+            self._session.cookie_jar.update_cookies(self._cookies)
 
-    # ── Header/Cookie 同步 ──
+    def update_cookies(self, cookies: Mapping[str, str]) -> None:
+        self._cookies.update(cookies)
+        if not self.closed:
+            self._session.cookie_jar.update_cookies(cookies)
 
-    @staticmethod
-    def update_headers(session: aiohttp.ClientSession | None, headers: dict[str, str]) -> None:
-        if session and not session.closed:
-            session.headers.clear()
-            session.headers.update(headers)
-
-    def update_cookies(
-        self,
-        session: aiohttp.ClientSession | None,
-        cookies: dict[str, str],
-    ) -> None:
-        if self._jar is not None:
-            self._jar.clear()
-            self._jar.update_cookies(cookies)
-        if session and not session.closed:
-            session.cookie_jar.clear()
-            session.cookie_jar.update_cookies(cookies)
-
-    # ── 异常映射 ──
+    def clear_cookies(self) -> None:
+        self._cookies.clear()
+        if not self.closed:
+            self._session.cookie_jar.clear()
 
     @staticmethod
-    def map_exception(exc: Exception, context: "RequestContext") -> Exception:
-        if isinstance(exc, (TimeoutException, NetworkException)):
+    def map_exception(exc: Exception, request: RequestArgs) -> Exception:
+        if isinstance(exc, LjpBaseException):
             return exc
-
-        ctx = {"method": context.method, "url": context.url, "attempt": context.attempt}
-
-        if isinstance(exc, asyncio.TimeoutError):
-            return TimeoutException("异步请求超时", timeout=sum(context.timeout), e=exc, context=ctx)
-
-        if isinstance(exc, aiohttp.ClientProxyConnectionError):
-            return NetworkException("代理连接失败", url=context.url, e=exc, context=ctx)
-
-        if isinstance(exc, aiohttp.ClientSSLError):
-            return NetworkException("SSL 连接失败", url=context.url, e=exc, context=ctx)
-
-        status = getattr(exc, "status", None)
+        context = {"method": request.method, "url": request.url, "attempt": request.attempt}
+        if isinstance(exc, (asyncio.TimeoutError, aiohttp.ServerTimeoutError)):
+            return TimeoutException("HTTP request timed out", timeout=sum(request.timeout), context=context)
         if isinstance(exc, aiohttp.ClientError):
-            return NetworkException("异步请求失败", url=context.url, status_code=status, e=exc, context=ctx)
-
-        return exc
+            return NetworkException("HTTP request failed", url=request.url, context=context)
+        return NetworkException("HTTP backend failed", url=request.url, context=context)
 
 
 __all__ = ["AiohttpAdapter"]
